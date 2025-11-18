@@ -2,7 +2,6 @@ import { useReadContract, useWriteContract, useAccount, useWaitForTransactionRec
 import { HouseOfCardsABI } from '../abi/HouseOfCardsABI'
 import { parseUnits } from 'viem'
 
-// TODO: Replace with your deployed contract address
 const CONTRACT_ADDRESS = '0x1DFd9003590E4A67594748Ecec18451e6cBDDD90'
 
 export function useGameContract() {
