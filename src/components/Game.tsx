@@ -16,6 +16,7 @@ declare global {
 import GameUI, { GameState, Player } from './GameUI'
 
 import { useGameContract } from '../hooks/useGameContract'
+import { useGameSocket } from '../hooks/useGameSocket'
 
 export default function Game() {
   // Contract Hooks
@@ -27,15 +28,22 @@ export default function Game() {
     isConfirming
   } = useGameContract()
 
-  // Game State (Hybrid: Contract + Local Mock)
-  const [gameState, setGameState] = React.useState<GameState>('WAITING')
-  const [potSize, setPotSize] = React.useState(0)
+  // WebSocket Hook
+  const { socket, gameState: serverState, isConnected, submitMove } = useGameSocket()
+
+  // Derived State from Server
+  const gameState = serverState?.status || 'WAITING'
+  const players = serverState?.players.map((addr: string) => ({
+    id: addr,
+    address: addr,
+    isAlive: true, // TODO: Add to server state
+    isCurrentTurn: addr === serverState.currentPlayer
+  })) || []
+  const currentPlayerId = serverState?.currentPlayer || undefined
+
+  // Local Visual State
+  const [potSize, setPotSize] = React.useState(0) // TODO: Sync with contract
   const [timeLeft, setTimeLeft] = React.useState(30)
-  const [players, setPlayers] = React.useState<Player[]>([
-    { id: '1', address: '0x1234...7890', isAlive: true, isCurrentTurn: false },
-    { id: '2', address: '0xabcd...abcd', isAlive: true, isCurrentTurn: false },
-  ])
-  const [currentPlayerId, setCurrentPlayerId] = React.useState<string | undefined>()
   const [fallenCount, setFallenCount] = React.useState(0)
   const [isSpectator, setIsSpectator] = React.useState(false)
 
@@ -73,6 +81,12 @@ export default function Game() {
   }, [gameState, timeLeft])
 
   const containerRef = useRef<HTMLDivElement>(null)
+  const socketRef = useRef<any>(null)
+  const blocksRef = useRef<any[]>([])
+
+  useEffect(() => {
+    socketRef.current = socket
+  }, [socket])
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -155,7 +169,7 @@ export default function Game() {
     scene: any,
     camera: any,
     table: any,
-    blocks: any[] = [],
+    // blocks: any[] = [], // Use ref instead
     loader: any,
     table_material: any,
     block_material: any,
@@ -167,6 +181,10 @@ export default function Game() {
   const initScene = function () {
     mouse_position = new THREE.Vector3(0, 0, 0)
     block_offset = new THREE.Vector3(0, 0, 0)
+
+    // Reset blocks
+    blocksRef.current = []
+    const blocks = blocksRef.current
 
     renderer = new THREE.WebGLRenderer({ antialias: true })
     renderer.setSize(window.innerWidth, window.innerHeight)
@@ -180,44 +198,17 @@ export default function Game() {
     scene = new Physijs.Scene({ fixedTimeStep: 1 / 120 })
     scene.setGravity(new THREE.Vector3(0, -30, 0))
 
+    // Physics Sync moved to top level component
+
+
     scene.addEventListener('update', function () {
-      // Collapse Detection
-      let fallen = 0
-      const totalBlocks = blocks.length
-
-      for (let i = 0; i < totalBlocks; i++) {
-        // If block falls below the table surface (y < 0.5)
-        if (blocks[i].position.y < 0.5) {
-          fallen++
-        }
-      }
-
-      // Update React state (throttled)
-      if (Math.random() < 0.1) { // Only update 10% of frames to save React renders
-        setFallenCount(fallen)
-
-        // Check Threshold
-        if (fallen / totalBlocks >= settings.collapseThreshold && gameState === 'ACTIVE') {
-          // Trigger Collapse
-          setGameState('VOTING')
-        }
-      }
-
-      if (selected_block !== null) {
-        const _v3 = new THREE.Vector3()
-        _v3.copy(mouse_position).add(block_offset).sub(selected_block.position).multiplyScalar(5)
-        _v3.y = 0
-        selected_block.setLinearVelocity(_v3)
-
-        // Reactivate all blocks
-        _v3.set(0, 0, 0)
-        for (let _i = 0; _i < blocks.length; _i++) {
-          blocks[_i].applyCentralImpulse(_v3)
-        }
-      }
-
-      scene.simulate(undefined, 1)
+      // Local physics loop removed. We rely on server updates.
+      // We can keep this for client-side prediction later if needed.
     })
+
+    // Start Render Loop
+    requestAnimationFrame(render)
+    // scene.simulate() // DISABLED: Server is authoritative
 
     camera = new THREE.PerspectiveCamera(
       35,
@@ -326,18 +317,18 @@ export default function Game() {
         block.receiveShadow = true
         block.castShadow = true
         scene.add(block)
-        blocks.push(block)
+        blocksRef.current.push(block)
       }
     }
   }
 
   const resetTower = function () {
     // Remove all existing blocks from the scene
-    for (let i = 0; i < blocks.length; i++) {
-      scene.remove(blocks[i])
+    for (let i = 0; i < blocksRef.current.length; i++) {
+      scene.remove(blocksRef.current[i])
     }
     // Clear the blocks array
-    blocks.length = 0
+    blocksRef.current.length = 0
     // Recreate the tower
     createTower()
   }
@@ -382,21 +373,37 @@ export default function Game() {
       vector.unproject(camera)
 
       const ray = new THREE.Raycaster(camera.position, vector.sub(camera.position).normalize())
-      const intersections = ray.intersectObjects(blocks)
+      const intersections = ray.intersectObjects(blocksRef.current)
 
       if (intersections.length > 0) {
         selected_block = intersections[0].object
 
-        const _vector_zero = new THREE.Vector3(0, 0, 0)
-        selected_block.setAngularFactor(_vector_zero)
-        selected_block.setAngularVelocity(_vector_zero)
-        selected_block.setLinearFactor(_vector_zero)
-        selected_block.setLinearVelocity(_vector_zero)
+        // Store selection but don't apply local physics
+        // We will calculate force on release
+      }
+    }
 
-        mouse_position.copy(intersections[0].point)
-        block_offset.subVectors(selected_block.position, mouse_position)
+    const handleInputEnd = function (evt: MouseEvent | TouchEvent) {
+      if (selected_block !== null && socketRef.current) {
+        // Calculate force vector based on drag or just a simple push
+        // For MVP: Apply a fixed force in the direction of the camera view or towards center
 
-        intersect_plane.position.y = mouse_position.y
+        // Better MVP: Calculate vector from block to mouse position
+        const force = new THREE.Vector3()
+        force.copy(mouse_position).sub(selected_block.position).normalize().multiplyScalar(10) // Strength 10
+
+        const blockIndex = blocksRef.current.indexOf(selected_block)
+
+        if (blockIndex !== -1) {
+          console.log('Sending Move:', blockIndex, force)
+          socketRef.current.emit('submitMove', {
+            blockIndex: blockIndex,
+            force: { x: force.x, y: force.y, z: force.z },
+            point: { x: selected_block.position.x, y: selected_block.position.y, z: selected_block.position.z }
+          })
+        }
+
+        selected_block = null
       }
     }
 
@@ -424,15 +431,8 @@ export default function Game() {
       }
     }
 
-    const handleInputEnd = function (evt: MouseEvent | TouchEvent) {
-      if (selected_block !== null) {
-        const _vector_one = new THREE.Vector3(1, 1, 1)
-        selected_block.setAngularFactor(_vector_one)
-        selected_block.setLinearFactor(_vector_one)
+    // Old handleInputEnd removed
 
-        selected_block = null
-      }
-    }
 
     // Mouse events
     renderer.domElement.addEventListener('mousedown', handleInputStart)
@@ -463,16 +463,7 @@ export default function Game() {
           } catch (e) {
             console.error(e)
           }
-
-          // Mock update for immediate feedback
-          setGameState('ACTIVE')
-          setPotSize(prev => prev + 1)
-          setPlayers(prev => [
-            ...prev,
-            { id: 'me', address: '0xMe', isAlive: true, isCurrentTurn: true }
-          ])
-          setCurrentPlayerId('me')
-          setIsSpectator(false)
+          // Server will update state via WebSocket
         }}
         onReload={() => {
           contractReload()
@@ -480,10 +471,7 @@ export default function Game() {
         }}
         onVote={(split) => {
           alert(`Voted to ${split ? 'Split' : 'Continue'}`)
-          // Reset for next round
-          setGameState('ACTIVE')
-          setFallenCount(0)
-          resetTower()
+          // TODO: Emit vote to server
         }}
       />
 
