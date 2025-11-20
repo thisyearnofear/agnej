@@ -113,7 +113,7 @@ io.on('connection', (socket) => {
             id: Date.now(),
             players: [],
             currentPlayer: null,
-            status: 'WAITING',
+            status: 'ACTIVE',
             maxPlayers: config.maxPlayers,
             difficulty: config.difficulty as 'EASY' | 'MEDIUM' | 'HARD',
             stake: config.stake,

@@ -10,6 +10,12 @@ export interface GameState {
     status: 'WAITING' | 'ACTIVE' | 'ENDED';
 }
 
+export interface PhysicsBlockState {
+    position: { x: number; y: number; z: number };
+    quaternion: { x: number; y: number; z: number; w: number };
+    velocity: { x: number; y: number; z: number };
+}
+
 export interface GameSettingsConfig {
     gameMode: 'SOLO_PRACTICE' | 'SINGLE_VS_AI' | 'MULTIPLAYER'
     playerCount: number
@@ -22,6 +28,7 @@ export function useGameSocket(settings?: GameSettingsConfig) {
     const [socket, setSocket] = useState<Socket | null>(null);
     const [isConnected, setIsConnected] = useState(false);
     const [gameState, setGameState] = useState<GameState | null>(null);
+    const [physicsState, setPhysicsState] = useState<PhysicsBlockState[] | null>(null);
 
     // Ref to prevent multiple connections in React Strict Mode
     const socketRef = useRef<Socket | null>(null);
@@ -52,13 +59,11 @@ export function useGameSocket(settings?: GameSettingsConfig) {
             setIsConnected(true);
 
             if (settings) {
-                // Only create game on server for non-practice modes
                 newSocket.emit('createGame', {
-                    gameMode: settings.gameMode,
                     maxPlayers: settings.gameMode === 'MULTIPLAYER' ? settings.playerCount : (settings.aiOpponentCount || 1) + 1,
                     difficulty: settings.difficulty,
                     stake: settings.stake,
-                    aiOpponentCount: settings.aiOpponentCount
+                    isPractice: false
                 });
             }
         });
@@ -71,6 +76,10 @@ export function useGameSocket(settings?: GameSettingsConfig) {
         newSocket.on('gameState', (state: GameState) => {
             console.log('Game State Update:', state);
             setGameState(state);
+        });
+
+        newSocket.on('physicsUpdate', (state: PhysicsBlockState[]) => {
+            setPhysicsState(state);
         });
 
         setSocket(newSocket);
@@ -93,6 +102,7 @@ export function useGameSocket(settings?: GameSettingsConfig) {
         socket,
         isConnected,
         gameState,
+        physicsState,
         submitMove
     };
 }

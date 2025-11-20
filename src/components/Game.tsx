@@ -35,7 +35,7 @@ export default function Game({ settings, onReset }: GameProps) {
   } = useGameContract()
 
   // WebSocket Hook
-  const { socket, gameState: serverState, isConnected, submitMove } = useGameSocket(settings)
+  const { socket, gameState: serverState, isConnected, physicsState, submitMove } = useGameSocket(settings)
 
   // Derived State from Server and Game Mode
   const gameState = settings.gameMode === 'SOLO_PRACTICE' ? 'ACTIVE' : (serverState?.status || 'WAITING')
@@ -113,15 +113,35 @@ export default function Game({ settings, onReset }: GameProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const socketRef = useRef<any>(null)
   const blocksRef = useRef<any[]>([])
+  const dragStartRef = useRef<any>(null)
+  const sceneRef = useRef<any>(null)
+  const initializedRef = useRef<boolean>(false)
 
   useEffect(() => {
     socketRef.current = socket
   }, [socket])
 
   useEffect(() => {
+    if (settings.gameMode === 'SOLO_PRACTICE') return
+    if (!physicsState || blocksRef.current.length === 0) return
+    const count = Math.min(blocksRef.current.length, physicsState.length)
+    for (let i = 0; i < count; i++) {
+      const b = blocksRef.current[i]
+      const s = physicsState[i]
+      b.position.set(s.position.x, s.position.y, s.position.z)
+      if (b.quaternion && s.quaternion) {
+        b.quaternion.set(s.quaternion.x, s.quaternion.y, s.quaternion.z, s.quaternion.w)
+      }
+      b.__dirtyPosition = true
+      b.__dirtyRotation = true
+    }
+  }, [physicsState, settings.gameMode])
+
+  useEffect(() => {
     if (typeof window === 'undefined') return
 
     const init = async () => {
+      if (initializedRef.current) return
       // Load required scripts
       try {
         // Load Three.js first
@@ -180,6 +200,9 @@ export default function Game({ settings, onReset }: GameProps) {
           window.removeEventListener('resize', handleResize)
           if (renderer) {
             renderer.dispose()
+            if (renderer.domElement && renderer.domElement.parentNode) {
+              renderer.domElement.parentNode.removeChild(renderer.domElement)
+            }
           }
         }
       } catch (error) {
@@ -188,6 +211,7 @@ export default function Game({ settings, onReset }: GameProps) {
     }
 
     init()
+    initializedRef.current = true
   }, [])
 
   const loadScript = (src: string): Promise<void> => {
@@ -243,9 +267,14 @@ export default function Game({ settings, onReset }: GameProps) {
     renderer.shadowMapSoft = true
     // Ensure the canvas can receive mouse events
     renderer.domElement.style.pointerEvents = 'auto'
+    // Ensure only one canvas
+    while (container.firstChild) {
+      container.removeChild(container.firstChild)
+    }
     container.appendChild(renderer.domElement)
 
     scene = new Physijs.Scene({ fixedTimeStep: 1 / 120 })
+    sceneRef.current = scene
     scene.setGravity(new THREE.Vector3(0, -30, 0))
     console.log('Physijs scene created, game mode:', settings.gameMode)
 
@@ -352,7 +381,6 @@ export default function Game({ settings, onReset }: GameProps) {
       initEventHandling()
     }, 0)
 
-    requestAnimationFrame(render)
     // Physics simulation is handled by the update event listener
   }
 
@@ -364,6 +392,11 @@ export default function Game({ settings, onReset }: GameProps) {
   const createTower = function () {
     const block_length = 6, block_height = 1, block_width = 1.5, block_offset = 2
     const block_geometry = new THREE.BoxGeometry(block_length, block_height, block_width)
+    const sc = sceneRef.current
+    if (!sc) {
+      console.error('Scene not ready, cannot create tower')
+      return
+    }
 
     for (let i = 0; i < 16; i++) {
       for (let j = 0; j < 3; j++) {
@@ -377,21 +410,25 @@ export default function Game({ settings, onReset }: GameProps) {
         }
         block.receiveShadow = true
         block.castShadow = true
-        scene.add(block)
+        sc.add(block)
         blocksRef.current.push(block)
       }
     }
   }
 
   const resetTower = function () {
-    // Remove all existing blocks from the scene
+    const sc = sceneRef.current
+    if (!sc) return
     for (let i = 0; i < blocksRef.current.length; i++) {
-      scene.remove(blocksRef.current[i])
+      sc.remove(blocksRef.current[i])
     }
-    // Clear the blocks array
     blocksRef.current.length = 0
-    // Recreate the tower
+    selected_block = null
     createTower()
+    setFallenCount(0)
+    if (settings.gameMode === 'SOLO_PRACTICE') {
+      sc.simulate()
+    }
   }
 
   const initEventHandling = function () {
@@ -424,12 +461,10 @@ export default function Game({ settings, onReset }: GameProps) {
       }
 
       const { clientX, clientY } = getEventPos(evt)
-
-      const vector = new THREE.Vector3(
-        (clientX / window.innerWidth) * 2 - 1,
-        -(clientY / window.innerHeight) * 2 + 1,
-        1
-      )
+      const rect = renderer.domElement.getBoundingClientRect()
+      const nx = ((clientX - rect.left) / rect.width) * 2 - 1
+      const ny = -((clientY - rect.top) / rect.height) * 2 + 1
+      const vector = new THREE.Vector3(nx, ny, 1)
 
       vector.unproject(camera)
 
@@ -438,38 +473,48 @@ export default function Game({ settings, onReset }: GameProps) {
 
       if (intersections.length > 0) {
         selected_block = intersections[0].object
-
-        // Store selection but don't apply local physics
-        // We will calculate force on release
+        intersect_plane.position.y = selected_block.position.y
+        const planeHit = ray.intersectObject(intersect_plane)
+        if (planeHit.length > 0) {
+          mouse_position.copy(planeHit[0].point)
+          dragStartRef.current = planeHit[0].point.clone()
+        } else {
+          dragStartRef.current = null
+        }
       }
     }
 
     const handleInputEnd = function (evt: MouseEvent | TouchEvent) {
       if (selected_block !== null) {
-        // Calculate force vector based on drag or just a simple push
-        // For MVP: Apply a fixed force in the direction of the camera view or towards center
-
-        // Better MVP: Calculate vector from block to mouse position
-        const force = new THREE.Vector3()
-        force.copy(mouse_position).sub(selected_block.position).normalize().multiplyScalar(10) // Strength 10
+        const start = dragStartRef.current
+        let end = mouse_position.clone()
+        if (start) {
+          end.y = start.y
+        }
+        const delta = new THREE.Vector3().copy(end).sub(start || selected_block.position)
+        delta.y = 0
+        const length = delta.length()
+        const dir = length > 0 ? delta.normalize() : new THREE.Vector3(1, 0, 0)
+        const impulse = dir.multiplyScalar(Math.max(5, Math.min(50, length * 10)))
 
         const blockIndex = blocksRef.current.indexOf(selected_block)
 
         if (settings.gameMode === 'SOLO_PRACTICE') {
-          // Local physics for solo practice
-          selected_block.applyCentralForce(force)
-          console.log('Applied local force:', blockIndex, force)
+          if (typeof selected_block.applyCentralImpulse === 'function') {
+            selected_block.applyCentralImpulse(impulse)
+          } else {
+            selected_block.applyCentralForce(impulse)
+          }
         } else if (socketRef.current && blockIndex !== -1) {
-          // Send to server for other modes
-          console.log('Sending Move:', blockIndex, force)
           socketRef.current.emit('submitMove', {
             blockIndex: blockIndex,
-            force: { x: force.x, y: force.y, z: force.z },
+            force: { x: impulse.x, y: impulse.y, z: impulse.z },
             point: { x: selected_block.position.x, y: selected_block.position.y, z: selected_block.position.z }
           })
         }
 
         selected_block = null
+        dragStartRef.current = null
       }
     }
 
@@ -481,15 +526,13 @@ export default function Game({ settings, onReset }: GameProps) {
 
       if (selected_block !== null) {
         const { clientX, clientY } = getEventPos(evt)
-
-        const vector = new THREE.Vector3(
-          (clientX / window.innerWidth) * 2 - 1,
-          -(clientY / window.innerHeight) * 2 + 1,
-          1
-        )
+        const rect = renderer.domElement.getBoundingClientRect()
+        const nx = ((clientX - rect.left) / rect.width) * 2 - 1
+        const ny = -((clientY - rect.top) / rect.height) * 2 + 1
+        const vector = new THREE.Vector3(nx, ny, 1)
         vector.unproject(camera)
-
         const ray = new THREE.Raycaster(camera.position, vector.sub(camera.position).normalize())
+        intersect_plane.position.y = selected_block.position.y
         const intersection = ray.intersectObject(intersect_plane)
         if (intersection.length > 0) {
           mouse_position.copy(intersection[0].point)
