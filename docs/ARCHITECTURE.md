@@ -22,6 +22,43 @@
 └─────────────────────┘
 ```
 
+## Architecture Modes
+
+### Solo Mode Architecture
+
+**Solo Practice & Solo Competitor** run entirely client-side with no server dependency.
+
+```
+┌─────────────────────────┐
+│   Frontend (Next.js)    │
+│  Three.js + Physijs     │
+│  Client Physics (120fps)│
+└──────────┬──────────────┘
+           │ (Solo Competitor only)
+           │ Web3 RPC calls
+┌──────────▼──────────────┐
+│ Leaderboard Contract    │
+│ (Linea Sepolia)         │
+│ 0x3127Ebc...           │
+└─────────────────────────┘
+```
+
+**Key Differences from Multiplayer:**
+- ✅ No Socket.io connection
+- ✅ No server-side physics
+- ✅ Instant physics simulation (Physijs worker in browser)
+- ✅ Direct blockchain interaction (only for score submission)
+- ✅ Fixed time step: 1/120 seconds (120 FPS)
+
+**Solo Competitor Specific:**
+- Timer managed client-side
+- Collapse detection: `lockedBlock.position.y < 12`
+- Score calculation: `distance from center > 10 units`
+- On-chain submission at game end
+
+### Multiplayer Mode Architecture
+
+
 ## Frontend-Server Communication
 
 ### WebSocket Events (Socket.io)
@@ -143,17 +180,63 @@ src/
 ├── app/
 │   └── (routes & pages)
 ├── components/
-│   ├── Game.tsx           # 3D canvas, Three.js
-│   ├── GameUI.tsx         # Turn timer, player list
-│   └── (other UI)
+│   ├── Game/             # ⭐ Modular game logic
+│   │   ├── types.ts      # Shared interfaces
+│   │   ├── physicsHelpers.ts  # Physics utilities
+│   │   └── useTowerBuilder.ts # Tower creation hook
+│   ├── Game.tsx          # Main 3D game component
+│   ├── GameUI.tsx        # HUD overlay (timer, score, players)
+│   └── GameSettings.tsx  # Mode selection
 ├── hooks/
-│   ├── useGameContract.ts # Web3 contract calls
-│   ├── useGameSocket.ts   # Socket.io connection
-│   └── (other hooks)
+│   ├── useGameContract.ts    # Multiplayer contract
+│   ├── useGameSocket.ts      # Socket.io for multiplayer
+│   └── useLeaderboard.ts     # ⭐ Solo leaderboard integration
 ├── lib/
 │   └── (utilities)
 └── abi/
-    └── (contract ABIs)
+    ├── HouseOfCardsABI.ts    # Multiplayer contract ABI
+    └── LeaderboardABI.ts     # ⭐ Leaderboard contract ABI
+```
+
+### Leaderboard Smart Contract
+
+**Address:** `0x3127Ebc72F9760728cc2032DC28Ed7D2250bC9cF` (Linea Sepolia)
+
+**Contract Functions:**
+
+| Function | Type | Description |
+|----------|------|-------------|
+| `submitScore(difficulty, score)` | Write | Submit final score on-chain |
+| `getHighScore(player, difficulty)` | Read | Get personal best score |
+| `getPlayerRank(player, difficulty)` | Read | Get ranking (1 = top) |
+| `getTopScores(difficulty, count)` | Read | Get top N scores |
+| `getTotalPlayers(difficulty)` | Read | Total unique players |
+
+**State Variables:**
+```solidity
+// Difficulty -> Player -> High Score
+mapping(string => mapping(address => uint256)) public highScores;
+
+// Difficulty -> List of all players
+mapping(string => address[]) private players;
+```
+
+**Events:**
+```solidity
+event ScoreSubmitted(address indexed player, string difficulty, uint256 score, uint256 timestamp);
+event NewHighScore(address indexed player, string difficulty, uint256 score);
+```
+
+**Frontend Integration:**
+```typescript
+const { 
+  submitScore,       // (difficulty, score) => void
+  highScore,         // number - personal best
+  rank,              // number - your ranking
+  topScores,         // Array<{player, score}>
+  totalPlayers,      // number
+  isConfirmed        // boolean - tx confirmed
+} = useLeaderboard('MEDIUM')
 ```
 
 ### Web3 Integration

@@ -302,4 +302,150 @@ After each collapse:
 
 ---
 
-*Last Updated: 2025-11-19*
+---
+
+## Current Status (November 2025)
+
+### ✅ Completed Features
+
+#### Solo Competitor Mode (Phase 1.5 - NEW!)
+- [x] **Complete solo gameplay loop**
+  - Timed mode (30s per block, resets on score)
+  - Locked top 2 layers
+  - Collapse detection (locked layers below Y=12)
+  - Score tracking (distance-based)
+  
+- [x] **On-Chain Leaderboard System**
+  - Smart contract deployed: `0x3127Ebc72F9760728cc2032DC28Ed7D2250bC9cF`
+  - Submit scores to blockchain
+  - Retrieve personal high scores
+  - Get player rankings
+  - Fetch top scores (global leaderboard)
+  - Track total players per difficulty
+  
+- [x] **Difficulty System**
+  - EASY mode (heavy, grippy blocks)
+  - MEDIUM mode (balanced physics)
+  - HARD mode (light, slippery blocks)
+  - Physics parameters: mass, friction, restitution, damping
+  
+- [x] **Enhanced UX**
+  - New high score celebration 🔥
+  - Rank display (#1, #127, etc.)
+  - Top 3 players preview with medals
+  - Transaction hash links to Lineascan
+  - Animated UI states
+  - Confetti and visual feedback
+
+#### Core Technical Implementation
+- [x] Physics engine (Physijs client, Cannon.js server)
+- [x] 3D rendering (Three.js)
+- [x] Touch controls for mobile
+- [x] Web3 wallet integration (RainbowKit)
+- [x] React 19 + Next.js 15
+- [x] Multi-mode architecture
+
+#### Bug Fixes & Optimizations
+- [x] Physics restart cleanup (worker lifecycle management)
+- [x] Event listener memory leaks fixed
+- [x] Dynamic difficulty in leaderboard hook
+- [x] Auto-refetch on score submission
+- [x] Solo mode state management (no server dependency)
+
+### 🚧 Partially Implemented
+
+#### Multiplayer Features
+- ⚠️ Turn-based queue system
+- ⚠️ Socket.io synchronization
+- ⚠️ Oracle integration (needs completion)
+- ⚠️ Server-authoritative physics
+- ⚠️ Multiple concurrent games
+
+### 📋 Next Steps
+
+#### Immediate (1-2 Weeks)
+1. **Leaderboard Page** (`/leaderboard`)
+   - Full top 10/25/50 display
+   - Filter by difficulty tabs
+   - Search for addresses
+   - Personal stats dashboard
+   
+2. **Social Features**
+   - Share score on Twitter/Farcaster
+   - "Challenge Friend" functionality
+   - Replay viewing
+
+3. **Solo Mode Enhancements**
+   - Historical score trends chart
+   - Weekly high score resets
+   - Achievements system
+
+#### Short-Term (1-2 Months)
+- Complete multiplayer oracle integration
+- Multiple concurrent multiplayer games
+- Spectator mode
+- Tournament system
+
+#### Long-Term (3-6 Months)
+- Cross-chain expansion
+- Advanced social features
+- NFT cosmetics
+- Platform revenue (fees/subscriptions)
+
+---
+
+## Updated Timeline
+
+### ✅ Month 1-2: MVP Foundation (COMPLETED)
+- ✅ Smart contract development
+- ✅ Physics tuning
+- ✅ Mobile-first UI
+- ✅ Wallet integration
+- ✅ Solo Practice mode
+- ✅ **BONUS:** Solo Competitor + Leaderboard!
+
+### 🎮 Month 3: Enhancement Phase (CURRENT)
+- ✅ Leaderboard smart contract deployed
+- ✅ On-chain scoring integrated
+- 🚧 Dedicated leaderboard page
+- 🚧 Multiplayer stabilization
+- [ ] Beta testing with real users
+
+### 📊 Month 4-6: Growth Phase
+- [ ] Multiplayer launch
+- [ ] Tournament system
+- [ ] Social features
+- [ ] Marketing campaign
+- [ ] Analytics dashboard
+
+### 🚀 Month 7+: Expansion
+- [ ] Cross-chain deployment
+- [ ] Advanced features
+- [ ] Monetization (2-5% platform fee)
+- [ ] Mobile app (React Native)
+
+---
+
+## Smart Contracts
+
+### Deployed Contracts (Linea Sepolia)
+
+1. **HouseOfCards** (Multiplayer Game Logic)
+   - Address: `0x1DFd9003590E4A67594748Ecec18451e6cBDDD90`
+   - Status: Deployed, partially integrated
+   - Functions: joinGame, reload, completeTurn, reportCollapse
+   
+2. **Leaderboard** (Solo Mode Scoring) ⭐ NEW
+   - Address: `0x3127Ebc72F9760728cc2032DC28Ed7D2250bC9cF`
+   - Status: ✅ Fully integrated and functional
+   - Functions:
+     - `submitScore(difficulty, score)` - Submit score
+     - `getHighScore(player, difficulty)` - Get personal best
+     - `getPlayerRank(player, difficulty)` - Get ranking
+     - `getTopScores(difficulty, count)` - Get top N
+     - `getTotalPlayers(difficulty)` - Get total players
+
+---
+
+*Last Updated: 2025-11-22*
+

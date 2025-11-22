@@ -2,6 +2,7 @@
 
 import React, { useEffect, useRef } from 'react'
 import { GameSettingsConfig } from './GameSettings'
+import { loadScript, getPhysicsConfig } from './Game/physicsHelpers'
 
 declare global {
   var Physijs: any
@@ -39,23 +40,30 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
   // WebSocket Hook
   const { socket, gameState: serverState, isConnected, physicsState, submitMove } = useGameSocket(settings)
 
-  // Leaderboard Hook
+  // Leaderboard Hook - Pass difficulty for correct high score fetching
   const {
     submitScore,
     highScore,
+    rank,
+    totalPlayers,
+    topScores,
     isPending: isSubmitting,
     isConfirming: isConfirmingScore,
-    isConfirmed: isScoreConfirmed
-  } = useLeaderboard()
+    isConfirmed: isScoreConfirmed,
+    hash: scoreHash,
+    refetchAll: refetchLeaderboard
+  } = useLeaderboard(settings.difficulty)
 
 
 
   // Derived State from Server and Game Mode
-  const gameState = settings.gameMode === 'SOLO_PRACTICE' ? 'ACTIVE' : (serverState?.status || 'WAITING')
+  const gameState = (settings.gameMode === 'SOLO_PRACTICE' || settings.gameMode === 'SOLO_COMPETITOR')
+    ? 'ACTIVE'
+    : (serverState?.status || 'WAITING')
 
   // Handle different game modes
   const players = React.useMemo(() => {
-    if (settings.gameMode === 'SOLO_PRACTICE') {
+    if (settings.gameMode === 'SOLO_PRACTICE' || settings.gameMode === 'SOLO_COMPETITOR') {
       return [{
         id: 'solo-player',
         address: 'You',
@@ -86,9 +94,11 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
     }
   }, [settings, serverState])
 
-  const currentPlayerId = settings.gameMode === 'SOLO_PRACTICE' ? 'solo-player' :
-    settings.gameMode === 'SINGLE_VS_AI' ? 'human-player' :
-      serverState?.currentPlayer || undefined
+  const currentPlayerId = (settings.gameMode === 'SOLO_PRACTICE' || settings.gameMode === 'SOLO_COMPETITOR')
+    ? 'solo-player'
+    : settings.gameMode === 'SINGLE_VS_AI'
+      ? 'human-player'
+      : serverState?.currentPlayer || undefined
 
   // Local Visual State
   const [potSize, setPotSize] = React.useState(0)
@@ -162,7 +172,7 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
 
     const init = async () => {
       // Remove the initializedRef guard - let React's useEffect handle this
-      console.log('[INIT] Initializing game...')
+      // console.log('[INIT] Initializing game...') // Removed debug log
 
       // Load required scripts (only if not already loaded)
       try {
@@ -183,19 +193,8 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
 
         // Set physijs configurations
         if (window.Physijs) {
-          console.log('Physijs loaded successfully, configuring...')
           window.Physijs.scripts.worker = '/js/physijs_worker.js'
           window.Physijs.scripts.ammo = '/js/ammo.js'
-
-          // Check if worker file exists
-          fetch(window.Physijs.scripts.worker)
-            .then(() => console.log('Worker file loaded'))
-            .catch(err => console.error('Worker file access error:', err))
-
-          // Check if ammo.js file exists
-          fetch(window.Physijs.scripts.ammo)
-            .then(() => console.log('Ammo.js loaded'))
-            .catch(err => console.error('Ammo.js file access error:', err))
         } else {
           console.error('Physijs is not available')
         }
@@ -227,33 +226,29 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
 
     // Main cleanup function - runs when component unmounts or dependencies change
     return () => {
-      console.log('[CLEANUP] Starting cleanup...')
-
       // Clear all pending worker check timeouts
       workerCheckTimeouts.current.forEach(timeoutId => clearTimeout(timeoutId))
       workerCheckTimeouts.current.clear()
-      console.log('[CLEANUP] Cleared worker check timeouts')
 
       if (requestRef.current) {
-        console.log('[CLEANUP] Cancelling animation frame')
         cancelAnimationFrame(requestRef.current)
       }
 
       // Cleanup Scene
       if (sceneRef.current) {
-        console.log('[CLEANUP] Cleaning up Physijs scene')
+        // console.log('[CLEANUP] Cleaning up Physijs scene') // Removed debug log
         const scene = sceneRef.current as any
 
         try {
           // CRITICAL: Remove the update event listener FIRST
           if (sceneUpdateListenerRef.current) {
-            console.log('[CLEANUP] Removing scene update listener')
+            // console.log('[CLEANUP] Removing scene update listener') // Removed debug log
             scene.removeEventListener('update', sceneUpdateListenerRef.current)
             sceneUpdateListenerRef.current = null
           }
 
           // Remove all objects from scene
-          console.log('[CLEANUP] Removing scene objects...')
+          // console.log('[CLEANUP] Removing scene objects...') // Removed debug log
           while (sceneRef.current.children.length > 0) {
             sceneRef.current.remove(sceneRef.current.children[0]);
           }
@@ -263,7 +258,7 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
 
           // DON'T terminate the worker - let Physijs manage it
           // Terminating it corrupts Physijs's global state
-          console.log('[CLEANUP] Leaving worker alive for Physijs to manage')
+          // console.log('[CLEANUP] Leaving worker alive for Physijs to manage') // Removed debug log
         } catch (err) {
           console.warn('[CLEANUP] Error during scene cleanup:', err)
         }
@@ -272,7 +267,6 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
       }
 
       if (engineRef.current.renderer) {
-        console.log('[CLEANUP] Disposing renderer')
         engineRef.current.renderer.dispose()
         if (engineRef.current.renderer.domElement && engineRef.current.renderer.domElement.parentNode) {
           engineRef.current.renderer.domElement.parentNode.removeChild(engineRef.current.renderer.domElement)
@@ -281,21 +275,10 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
       }
 
       // Reset refs
-      console.log('[CLEANUP] Resetting refs')
       blocksRef.current = []
       scoredBlocksRef.current.clear()
     }
   }, [settings.gameMode, settings.difficulty]) // Re-init when gameMode or difficulty changes
-
-  const loadScript = (src: string): Promise<void> => {
-    return new Promise((resolve, reject) => {
-      const script = document.createElement('script')
-      script.src = src
-      script.onload = () => resolve()
-      script.onerror = reject
-      document.head.appendChild(script)
-    })
-  }
 
   // Engine Refs to persist Three.js objects across renders
   const engineRef = useRef<{
@@ -326,17 +309,8 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
     lastPhysicsUpdate: 0
   })
 
-  const getPhysicsConfig = (difficulty: 'EASY' | 'MEDIUM' | 'HARD') => {
-    switch (difficulty) {
-      case 'EASY': return { friction: 0.8, restitution: 0.1, mass: 2.0, damping: 0.1 }
-      case 'MEDIUM': return { friction: 0.5, restitution: 0.3, mass: 1.0, damping: 0.05 }
-      case 'HARD': return { friction: 0.2, restitution: 0.5, mass: 0.5, damping: 0.01 }
-      default: return { friction: 0.5, restitution: 0.3, mass: 1.0, damping: 0.05 }
-    }
-  }
-
   const initScene = function () {
-    console.log('[INIT] Starting initScene...')
+    // console.log('[INIT] Starting initScene...') // Removed debug log
     const engine = engineRef.current
     engine.interaction.mousePos = new THREE.Vector3(0, 0, 0)
     engine.interaction.offset = new THREE.Vector3(0, 0, 0)
@@ -356,7 +330,7 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
     const width = containerRect.width
     const height = containerRect.height
 
-    console.log('[INIT] Container dimensions:', width, 'x', height)
+    // console.log('[INIT] Container dimensions:', width, 'x', height) // Removed debug log
 
     engine.renderer = new THREE.WebGLRenderer({ antialias: true })
     engine.renderer.setSize(width, height)
@@ -375,16 +349,10 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
     const scene = new Physijs.Scene({ fixedTimeStep: 1 / 120 })
     sceneRef.current = scene
     scene.setGravity(new THREE.Vector3(0, -30, 0))
-    console.log('[INIT] Physijs scene created, game mode:', settings.gameMode)
 
-    let updateCount = 0
     // Store the listener so we can remove it later
     const sceneUpdateListener = function () {
       engine.lastPhysicsUpdate = Date.now()
-      updateCount++
-      if (updateCount % 60 === 0) {
-        console.log('Physics heartbeat (60 ticks)')
-      }
 
       // For solo practice mode, we handle local physics
       // For server modes, we rely on server updates
@@ -406,7 +374,7 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
 
             // Check Collapse:
             if (block.userData?.isLocked && block.position.y < 12) {
-              console.log('Collapse detected! Top layer fell.')
+              // console.log('Collapse detected! Top layer fell.') // Removed debug log
               setGameOver(true)
             }
           })
@@ -416,19 +384,18 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
 
     sceneUpdateListenerRef.current = sceneUpdateListener
     scene.addEventListener('update', sceneUpdateListener)
-    console.log('[INIT] Scene update event listener registered')
+    // console.log('[INIT] Scene update event listener registered') // Removed debug log
 
     // Start Render Loop
     requestAnimationFrame(render)
 
     // Enable physics simulation based on game mode - ONLY after worker is ready
     if (settings.gameMode === 'SOLO_PRACTICE' || settings.gameMode === 'SOLO_COMPETITOR') {
-      console.log('[INIT] Waiting for Physijs worker to be ready...')
+      // console.log('[INIT] Waiting for Physijs worker to be ready...') // Removed debug log
 
       // Wait for worker to be ready before starting simulation
       const startPhysics = () => {
         if (sceneRef.current) {
-          console.log('[INIT] Starting local physics simulation')
           // Clear all pending checks since we're now starting
           workerCheckTimeouts.current.forEach(timeoutId => clearTimeout(timeoutId))
           workerCheckTimeouts.current.clear()
@@ -440,10 +407,8 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
       const checkWorkerReady = () => {
         const s = sceneRef.current as any
         if (s && s._worker) {
-          console.log('[INIT] Worker ready, starting physics')
           startPhysics()
         } else {
-          console.log('[INIT] Worker not ready yet, waiting...')
           const timeoutId = setTimeout(checkWorkerReady, 50)
           workerCheckTimeouts.current.add(timeoutId)
         }
@@ -585,7 +550,7 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
     const lMat = engine.materials.lockedBlock || mat
 
     const physicsConfig = getPhysicsConfig(settings.difficulty)
-    console.log('Creating tower with physics config:', physicsConfig)
+    // console.log('Creating tower with physics config:', physicsConfig) // Removed debug log
 
     for (let i = 0; i < 16; i++) {
       // Determine if this layer is locked (top 2 layers: 14 and 15)
@@ -679,16 +644,16 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
 
       const ray = new THREE.Raycaster(engine.camera.position, vector.sub(engine.camera.position).normalize())
 
-      console.log('Raycasting against', blocksRef.current.length, 'blocks')
+      // console.log('Raycasting against', blocksRef.current.length, 'blocks') // Removed debug log
       const intersections = ray.intersectObjects(blocksRef.current)
 
       if (intersections.length > 0) {
         const block = intersections[0].object
-        console.log('Intersection found:', block.id)
+        // console.log('Intersection found:', block.id) // Removed debug log
 
         // Competitor Mode: Prevent selecting top 2 levels (Layers 14 and 15)
         if (settings.gameMode === 'SOLO_COMPETITOR' && block.userData?.layer >= 14) {
-          console.log('Cannot move blocks from top 2 levels!')
+          console.warn('Cannot move blocks from top 2 levels!')
           return
         }
 
@@ -699,21 +664,21 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
 
         const planeHit = ray.intersectObject(engine.interaction.plane)
         if (planeHit.length > 0) {
-          console.log('Plane hit at', planeHit[0].point)
+          // console.log('Plane hit at', planeHit[0].point) // Removed debug log
           engine.interaction.mousePos.copy(planeHit[0].point)
           dragStartRef.current = planeHit[0].point.clone()
         } else {
-          console.log('Plane hit failed')
+          // console.log('Plane hit failed') // Removed debug log
           dragStartRef.current = null
         }
       } else {
-        console.log('No intersection found')
+        // console.log('No intersection found') // Removed debug log
       }
     }
 
     const handleInputEnd = function (evt: MouseEvent | TouchEvent) {
       if (engine.interaction.selectedBlock !== null) {
-        console.log('Input End. Selected block:', engine.interaction.selectedBlock.id)
+        // console.log('Input End. Selected block:', engine.interaction.selectedBlock.id) // Removed debug log
         const start = dragStartRef.current
         let end = engine.interaction.mousePos.clone()
         if (start) {
@@ -722,7 +687,7 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
         const delta = new THREE.Vector3().copy(end).sub(start || engine.interaction.selectedBlock.position)
         delta.y = 0
         const length = delta.length()
-        console.log('Drag length:', length)
+        // console.log('Drag length:', length) // Removed debug log
         const dir = length > 0 ? delta.normalize() : new THREE.Vector3(1, 0, 0)
         const impulse = dir.multiplyScalar(Math.max(5, Math.min(50, length * 10)))
 
@@ -730,7 +695,7 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
 
         if (settings.gameMode === 'SOLO_PRACTICE' || settings.gameMode === 'SOLO_COMPETITOR') {
           const block = engine.interaction.selectedBlock
-          console.log('Applying impulse:', impulse, 'to block mass:', block.mass)
+          // console.log('Applying impulse:', impulse, 'to block mass:', block.mass) // Removed debug log
 
           // Attempt to wake up the block
           if (block.setAngularVelocity) block.setAngularVelocity(new THREE.Vector3(0, 0, 0))
@@ -761,7 +726,7 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
       }
 
       if (engine.interaction.selectedBlock !== null) {
-        console.log('Input Move. Selected block:', engine.interaction.selectedBlock.id)
+        // console.log('Input Move. Selected block:', engine.interaction.selectedBlock.id) // Removed debug log
         const { clientX, clientY } = getEventPos(evt)
         const rect = engine.renderer.domElement.getBoundingClientRect()
         const nx = ((clientX - rect.left) / rect.width) * 2 - 1
@@ -840,42 +805,107 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
 
       {/* Game Over Overlay for Competitor Mode */}
       {gameOver && settings.gameMode === 'SOLO_COMPETITOR' && (
-        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
-          <div className="bg-gray-900 border border-white/20 p-8 rounded-2xl text-center max-w-md w-full">
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+          <div className="bg-gradient-to-br from-gray-900 to-gray-800 border border-white/20 p-8 rounded-2xl text-center max-w-lg w-full shadow-2xl">
+
+            {/* New High Score Celebration */}
+            {score > highScore && score > 0 && (
+              <div className="mb-4 bg-gradient-to-r from-yellow-500/20 to-orange-500/20 border-2 border-yellow-400 rounded-xl p-4 animate-pulse">
+                <div className="text-2xl font-bold text-yellow-400 flex items-center justify-center gap-2">
+                  🔥 NEW HIGH SCORE! 🔥
+                </div>
+                <div className="text-sm text-yellow-200 mt-1">Previous Best: {highScore}</div>
+              </div>
+            )}
+
             <h2 className="text-4xl font-bold text-white mb-2">Game Over</h2>
             <p className="text-gray-400 mb-6">The tower collapsed or time ran out!</p>
 
-            <div className="bg-white/5 rounded-xl p-6 mb-8">
+            {/* Score Display */}
+            <div className="bg-white/5 rounded-xl p-6 mb-6">
               <div className="text-sm text-gray-400 uppercase tracking-wider mb-1">Final Score</div>
               <div className="text-6xl font-bold text-yellow-400">{score}</div>
-              <div className="text-sm text-gray-500 mt-2">Difficulty: {settings.difficulty}</div>
+              <div className="text-sm text-gray-500 mt-2">Difficulty: <span className="text-white font-semibold">{settings.difficulty}</span></div>
             </div>
 
+            {/* Rank & Stats */}
+            {rank > 0 && totalPlayers > 0 && (
+              <div className="grid grid-cols-2 gap-3 mb-6">
+                <div className="bg-white/5 rounded-lg p-4">
+                  <div className="text-xs text-gray-400 uppercase mb-1">Your Rank</div>
+                  <div className="text-2xl font-bold text-blue-400">
+                    #{rank}
+                  </div>
+                </div>
+                <div className="bg-white/5 rounded-lg p-4">
+                  <div className="text-xs text-gray-400 uppercase mb-1">Total Players</div>
+                  <div className="text-2xl font-bold text-purple-400">
+                    {totalPlayers}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Top 3 Preview */}
+            {topScores && topScores.length > 0 && (
+              <div className="bg-white/5 rounded-xl p-4 mb-6">
+                <div className="text-xs text-gray-400 uppercase tracking-wider mb-3">Top Players ({settings.difficulty})</div>
+                <div className="space-y-2">
+                  {topScores.slice(0, 3).map((entry, idx) => (
+                    <div key={idx} className="flex items-center justify-between text-sm">
+                      <div className="flex items-center gap-2">
+                        <span className="text-lg">{idx === 0 ? '🥇' : idx === 1 ? '🥈' : '🥉'}</span>
+                        <span className="text-gray-300 font-mono">
+                          {entry.player.slice(0, 6)}...{entry.player.slice(-4)}
+                        </span>
+                      </div>
+                      <span className="text-yellow-400 font-bold">{entry.score}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Transaction Hash Link */}
+            {isScoreConfirmed && scoreHash && (
+              <a
+                href={`https://sepolia.lineascan.build/tx/${scoreHash}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="block mb-4 text-sm text-blue-400 hover:text-blue-300 underline"
+              >
+                View Transaction on Lineascan ↗
+              </a>
+            )}
+
+            {/* Actions */}
             <div className="space-y-3">
               <button
                 onClick={() => submitScore(settings.difficulty, score)}
                 disabled={isSubmitting || isConfirmingScore || isScoreConfirmed}
-                className={`w-full font-bold py-3 rounded-lg transition-colors ${isScoreConfirmed
-                  ? 'bg-green-600 text-white cursor-default'
-                  : 'bg-yellow-600 hover:bg-yellow-500 text-white'
-                  } disabled:opacity-50 disabled:cursor-not-allowed`}
+                className={`w-full font-bold py-3 rounded-lg transition-all transform ${isScoreConfirmed
+                    ? 'bg-green-600 text-white cursor-default'
+                    : 'bg-gradient-to-r from-yellow-600 to-orange-600 hover:from-yellow-500 hover:to-orange-500 text-white hover:scale-105'
+                  } disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none`}
               >
-                {isSubmitting ? 'Check Wallet...' :
-                  isConfirmingScore ? 'Confirming...' :
-                    isScoreConfirmed ? 'Score Submitted!' : 'Submit Score (On-Chain)'}
+                {isSubmitting ? '⏳ Check Wallet...' :
+                  isConfirmingScore ? '⛓️ Confirming on Blockchain...' :
+                    isScoreConfirmed ? '✅ Score Submitted!' : '💎 Submit Score (On-Chain)'}
               </button>
+
               <button
                 onClick={resetTower}
                 className="w-full bg-white/10 hover:bg-white/20 text-white font-semibold py-3 rounded-lg transition-colors"
               >
-                Try Again
+                🔄 Try Again
               </button>
+
               {onExit && (
                 <button
                   onClick={onExit}
                   className="w-full bg-white/5 hover:bg-white/10 text-gray-300 font-semibold py-3 rounded-lg transition-colors"
                 >
-                  Exit to Menu
+                  🚪 Exit to Menu
                 </button>
               )}
             </div>
