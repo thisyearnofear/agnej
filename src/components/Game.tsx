@@ -120,26 +120,24 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
     }
   }, [gameStateData])
 
-  // Timer Logic
+  // Timer Logic - Only active in SOLO_COMPETITOR mode
   useEffect(() => {
     let interval: NodeJS.Timeout
-    if (gameState === 'ACTIVE' && !gameOver && !gameWon && !showRules) {
+    // Timer is ONLY enabled for SOLO_COMPETITOR mode
+    if (settings.gameMode === 'SOLO_COMPETITOR' && gameState === 'ACTIVE' && !gameOver && !gameWon && !showRules) {
       interval = setInterval(() => {
         setTimeLeft((prev) => {
           if (prev <= 1) {
-            if (settings.gameMode === 'SOLO_COMPETITOR') {
-              setGameOver(true)
-              gameOverRef.current = true
-              return 0
-            }
-            return 30 // Reset for next turn (mock for other modes)
+            setGameOver(true)
+            gameOverRef.current = true
+            return 0
           }
           return prev - 1
         })
       }, 1000)
     }
     return () => clearInterval(interval)
-  }, [gameState, gameOver, gameWon, settings.gameMode, timeLeft])
+  }, [gameState, gameOver, gameWon, settings.gameMode, showRules, timeLeft])
 
   const containerRef = useRef<HTMLDivElement>(null)
   const socketRef = useRef<any>(null)

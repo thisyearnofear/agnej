@@ -156,8 +156,8 @@ export default function GameUI({
                 </div>
             </div>
 
-            {/* Center: Timer (only when active) */}
-            {gameState === 'ACTIVE' && (
+            {/* Center: Timer (only in SOLO_COMPETITOR mode) */}
+            {gameState === 'ACTIVE' && gameMode === 'SOLO_COMPETITOR' && (
                 <div className="absolute top-24 left-1/2 -translate-x-1/2 pointer-events-none flex flex-col items-center gap-2">
                     <div className={`text-4xl font-black drop-shadow-lg transition-colors duration-300 ${timeLeft <= 10 ? 'text-red-500 animate-pulse' : 'text-white'
                         }`}>
