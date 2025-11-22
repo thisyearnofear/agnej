@@ -133,6 +133,9 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
   const sceneRef = useRef<any>(null)
   const initializedRef = useRef<boolean>(false)
   const scoredBlocksRef = useRef<Set<number>>(new Set())
+  const requestRef = useRef<number | undefined>(undefined)
+  const workerCheckTimeouts = useRef<Set<NodeJS.Timeout>>(new Set())
+  const sceneUpdateListenerRef = useRef<any>(null)
 
   useEffect(() => {
     socketRef.current = socket
@@ -158,8 +161,10 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
     if (typeof window === 'undefined') return
 
     const init = async () => {
-      if (initializedRef.current) return
-      // Load required scripts
+      // Remove the initializedRef guard - let React's useEffect handle this
+      console.log('[INIT] Initializing game...')
+
+      // Load required scripts (only if not already loaded)
       try {
         // Load Three.js first
         if (!window.THREE) {
@@ -195,41 +200,92 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
           console.error('Physijs is not available')
         }
 
-        // Initialize the game
+        // Initialize the scene
         initScene()
 
         // Handle window resize
         const handleResize = () => {
-          if (renderer && camera && containerRef.current) {
+          const engine = engineRef.current
+          if (engine.renderer && engine.camera && containerRef.current) {
             const rect = containerRef.current.getBoundingClientRect()
             const width = rect.width
             const height = rect.height
 
-            camera.aspect = width / height
-            camera.updateProjectionMatrix()
-            renderer.setSize(width, height)
+            engine.camera.aspect = width / height
+            engine.camera.updateProjectionMatrix()
+            engine.renderer.setSize(width, height)
           }
         }
 
         window.addEventListener('resize', handleResize)
-
-        return () => {
-          window.removeEventListener('resize', handleResize)
-          if (renderer) {
-            renderer.dispose()
-            if (renderer.domElement && renderer.domElement.parentNode) {
-              renderer.domElement.parentNode.removeChild(renderer.domElement)
-            }
-          }
-        }
       } catch (error) {
-        console.error('Failed to load scripts:', error)
+        console.error('Error initializing game:', error)
       }
     }
 
     init()
-    initializedRef.current = true
-  }, [])
+
+    // Main cleanup function - runs when component unmounts or dependencies change
+    return () => {
+      console.log('[CLEANUP] Starting cleanup...')
+
+      // Clear all pending worker check timeouts
+      workerCheckTimeouts.current.forEach(timeoutId => clearTimeout(timeoutId))
+      workerCheckTimeouts.current.clear()
+      console.log('[CLEANUP] Cleared worker check timeouts')
+
+      if (requestRef.current) {
+        console.log('[CLEANUP] Cancelling animation frame')
+        cancelAnimationFrame(requestRef.current)
+      }
+
+      // Cleanup Scene
+      if (sceneRef.current) {
+        console.log('[CLEANUP] Cleaning up Physijs scene')
+        const scene = sceneRef.current as any
+
+        try {
+          // CRITICAL: Remove the update event listener FIRST
+          if (sceneUpdateListenerRef.current) {
+            console.log('[CLEANUP] Removing scene update listener')
+            scene.removeEventListener('update', sceneUpdateListenerRef.current)
+            sceneUpdateListenerRef.current = null
+          }
+
+          // Remove all objects from scene
+          console.log('[CLEANUP] Removing scene objects...')
+          while (sceneRef.current.children.length > 0) {
+            sceneRef.current.remove(sceneRef.current.children[0]);
+          }
+
+          // Stop simulation
+          scene.onSimulationResume = function () { }
+
+          // DON'T terminate the worker - let Physijs manage it
+          // Terminating it corrupts Physijs's global state
+          console.log('[CLEANUP] Leaving worker alive for Physijs to manage')
+        } catch (err) {
+          console.warn('[CLEANUP] Error during scene cleanup:', err)
+        }
+
+        sceneRef.current = null
+      }
+
+      if (engineRef.current.renderer) {
+        console.log('[CLEANUP] Disposing renderer')
+        engineRef.current.renderer.dispose()
+        if (engineRef.current.renderer.domElement && engineRef.current.renderer.domElement.parentNode) {
+          engineRef.current.renderer.domElement.parentNode.removeChild(engineRef.current.renderer.domElement)
+        }
+        engineRef.current.renderer = null
+      }
+
+      // Reset refs
+      console.log('[CLEANUP] Resetting refs')
+      blocksRef.current = []
+      scoredBlocksRef.current.clear()
+    }
+  }, [settings.gameMode, settings.difficulty]) // Re-init when gameMode or difficulty changes
 
   const loadScript = (src: string): Promise<void> => {
     return new Promise((resolve, reject) => {
@@ -241,21 +297,34 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
     })
   }
 
-  let renderer: any,
-    render_stats: any,
-    physics_stats: any,
-    scene: any,
-    camera: any,
-    table: any,
-    // blocks: any[] = [], // Use ref instead
-    loader: any,
-    table_material: any,
-    block_material: any,
-    locked_block_material: any,
-    intersect_plane: any,
-    selected_block: any = null,
-    mouse_position: any,
-    block_offset: any
+  // Engine Refs to persist Three.js objects across renders
+  const engineRef = useRef<{
+    renderer: any
+    camera: any
+    materials: {
+      table: any
+      block: any
+      lockedBlock: any
+    }
+    interaction: {
+      plane: any
+      selectedBlock: any
+      mousePos: any
+      offset: any
+    }
+    lastPhysicsUpdate: number
+  }>({
+    renderer: null,
+    camera: null,
+    materials: { table: null, block: null, lockedBlock: null },
+    interaction: {
+      plane: null,
+      selectedBlock: null,
+      mousePos: null, // Will init in initScene
+      offset: null
+    },
+    lastPhysicsUpdate: 0
+  })
 
   const getPhysicsConfig = (difficulty: 'EASY' | 'MEDIUM' | 'HARD') => {
     switch (difficulty) {
@@ -267,17 +336,19 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
   }
 
   const initScene = function () {
-    mouse_position = new THREE.Vector3(0, 0, 0)
-    block_offset = new THREE.Vector3(0, 0, 0)
+    console.log('[INIT] Starting initScene...')
+    const engine = engineRef.current
+    engine.interaction.mousePos = new THREE.Vector3(0, 0, 0)
+    engine.interaction.offset = new THREE.Vector3(0, 0, 0)
+    engine.lastPhysicsUpdate = Date.now()
 
     // Reset blocks
     blocksRef.current = []
-    const blocks = blocksRef.current
 
     // Get the actual container dimensions
     const container = containerRef.current
     if (!container) {
-      console.error('Container ref not available')
+      console.error('[INIT] Container ref not available')
       return
     }
 
@@ -285,35 +356,40 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
     const width = containerRect.width
     const height = containerRect.height
 
-    console.log('Container dimensions:', width, 'x', height)
+    console.log('[INIT] Container dimensions:', width, 'x', height)
 
-    renderer = new THREE.WebGLRenderer({ antialias: true })
-    renderer.setSize(width, height)
-    renderer.setClearColor(0x2c3e50)
-    renderer.shadowMap.enabled = true
-    renderer.shadowMapSoft = true
+    engine.renderer = new THREE.WebGLRenderer({ antialias: true })
+    engine.renderer.setSize(width, height)
+    engine.renderer.setClearColor(0x2c3e50)
+    engine.renderer.shadowMap.enabled = true
+    engine.renderer.shadowMapSoft = true
     // Ensure the canvas can receive mouse events
-    renderer.domElement.style.pointerEvents = 'auto'
+    engine.renderer.domElement.style.pointerEvents = 'auto'
+
     // Ensure only one canvas
     while (container.firstChild) {
       container.removeChild(container.firstChild)
     }
-    container.appendChild(renderer.domElement)
+    container.appendChild(engine.renderer.domElement)
 
-    scene = new Physijs.Scene({ fixedTimeStep: 1 / 120 })
+    const scene = new Physijs.Scene({ fixedTimeStep: 1 / 120 })
     sceneRef.current = scene
     scene.setGravity(new THREE.Vector3(0, -30, 0))
-    console.log('Physijs scene created, game mode:', settings.gameMode)
+    console.log('[INIT] Physijs scene created, game mode:', settings.gameMode)
 
-    // Physics Sync moved to top level component
+    let updateCount = 0
+    // Store the listener so we can remove it later
+    const sceneUpdateListener = function () {
+      engine.lastPhysicsUpdate = Date.now()
+      updateCount++
+      if (updateCount % 60 === 0) {
+        console.log('Physics heartbeat (60 ticks)')
+      }
 
-
-    scene.addEventListener('update', function () {
       // For solo practice mode, we handle local physics
       // For server modes, we rely on server updates
       if (settings.gameMode === 'SOLO_PRACTICE' || settings.gameMode === 'SOLO_COMPETITOR') {
         // Continue local physics simulation
-        // console.log('Physics update tick')
         scene.simulate()
 
         // Competitor Mode Logic: Scoring and Collapse
@@ -329,9 +405,6 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
             }
 
             // Check Collapse:
-            // We monitor the "Locked" blocks (the top 2 layers, 14 and 15).
-            // Since the user cannot move these, if they fall significantly, the tower has collapsed.
-            // Layer 14 starts at y=14.5. If it falls below y=12, it's a collapse.
             if (block.userData?.isLocked && block.position.y < 12) {
               console.log('Collapse detected! Top layer fell.')
               setGameOver(true)
@@ -339,26 +412,57 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
           })
         }
       }
-    })
+    }
+
+    sceneUpdateListenerRef.current = sceneUpdateListener
+    scene.addEventListener('update', sceneUpdateListener)
+    console.log('[INIT] Scene update event listener registered')
 
     // Start Render Loop
     requestAnimationFrame(render)
 
-    // Enable physics simulation based on game mode
+    // Enable physics simulation based on game mode - ONLY after worker is ready
     if (settings.gameMode === 'SOLO_PRACTICE' || settings.gameMode === 'SOLO_COMPETITOR') {
-      console.log('Starting local physics simulation for solo practice')
-      scene.simulate()
+      console.log('[INIT] Waiting for Physijs worker to be ready...')
+
+      // Wait for worker to be ready before starting simulation
+      const startPhysics = () => {
+        if (sceneRef.current) {
+          console.log('[INIT] Starting local physics simulation')
+          // Clear all pending checks since we're now starting
+          workerCheckTimeouts.current.forEach(timeoutId => clearTimeout(timeoutId))
+          workerCheckTimeouts.current.clear()
+          sceneRef.current.simulate()
+        }
+      }
+
+      // Check if worker is ready, if not, wait for it
+      const checkWorkerReady = () => {
+        const s = sceneRef.current as any
+        if (s && s._worker) {
+          console.log('[INIT] Worker ready, starting physics')
+          startPhysics()
+        } else {
+          console.log('[INIT] Worker not ready yet, waiting...')
+          const timeoutId = setTimeout(checkWorkerReady, 50)
+          workerCheckTimeouts.current.add(timeoutId)
+        }
+      }
+
+      // Give the scene a moment to create its worker
+      const initialTimeoutId = setTimeout(checkWorkerReady, 100)
+      workerCheckTimeouts.current.add(initialTimeoutId)
     }
 
-    camera = new THREE.PerspectiveCamera(
+    engine.camera = new THREE.PerspectiveCamera(
       35,
       width / height,
       1,
       1000
     )
-    camera.position.set(25, 20, 25)
-    camera.lookAt(new THREE.Vector3(0, 7, 0))
-    scene.add(camera)
+    engine.camera.position.set(25, 20, 25)
+    engine.camera.lookAt(new THREE.Vector3(0, 7, 0))
+    scene.add(engine.camera)
 
     // Lights
     const am_light = new THREE.AmbientLight(0x444444)
@@ -380,7 +484,7 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
     scene.add(dir_light)
 
     // Loader
-    loader = new THREE.TextureLoader()
+    const loader = new THREE.TextureLoader()
 
     const physicsConfig = getPhysicsConfig(settings.difficulty)
 
@@ -389,40 +493,40 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
       console.error('Error loading wood texture:', err)
     })
 
-    table_material = Physijs.createMaterial(
+    engine.materials.table = Physijs.createMaterial(
       new THREE.MeshLambertMaterial({ map: woodTexture }),
       physicsConfig.friction, // friction
       physicsConfig.restitution // restitution
     )
-    table_material.map.wrapS = table_material.map.wrapT = THREE.RepeatWrapping
-    table_material.map.repeat.set(5, 5)
+    engine.materials.table.map.wrapS = engine.materials.table.map.wrapT = THREE.RepeatWrapping
+    engine.materials.table.map.repeat.set(5, 5)
 
     const plywoodTexture = loader.load('/images/plywood.jpg', undefined, undefined, (err: any) => {
       console.error('Error loading plywood texture:', err)
     })
 
     // Standard Block Material
-    block_material = Physijs.createMaterial(
+    engine.materials.block = Physijs.createMaterial(
       new THREE.MeshLambertMaterial({ map: plywoodTexture }),
       physicsConfig.friction,
       physicsConfig.restitution
     )
-    block_material.map.wrapS = block_material.map.wrapT = THREE.RepeatWrapping
-    block_material.map.repeat.set(1, .5)
+    engine.materials.block.map.wrapS = engine.materials.block.map.wrapT = THREE.RepeatWrapping
+    engine.materials.block.map.repeat.set(1, .5)
 
     // Locked Block Material (Darker/Reddish) for top layers
-    locked_block_material = Physijs.createMaterial(
+    engine.materials.lockedBlock = Physijs.createMaterial(
       new THREE.MeshLambertMaterial({ map: plywoodTexture, color: 0xffaaaa }), // Red tint
       physicsConfig.friction,
       physicsConfig.restitution
     )
-    locked_block_material.map.wrapS = locked_block_material.map.wrapT = THREE.RepeatWrapping
-    locked_block_material.map.repeat.set(1, .5)
+    engine.materials.lockedBlock.map.wrapS = engine.materials.lockedBlock.map.wrapT = THREE.RepeatWrapping
+    engine.materials.lockedBlock.map.repeat.set(1, .5)
 
     // Table
-    table = new Physijs.BoxMesh(
+    const table = new Physijs.BoxMesh(
       new THREE.BoxGeometry(50, 1, 50),
-      table_material,
+      engine.materials.table,
       0, // mass
       { restitution: physicsConfig.restitution, friction: physicsConfig.friction }
     )
@@ -430,14 +534,14 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
     table.receiveShadow = true
     scene.add(table)
 
-    createTower(block_material, locked_block_material)
+    createTower()
 
-    intersect_plane = new THREE.Mesh(
+    engine.interaction.plane = new THREE.Mesh(
       new THREE.PlaneGeometry(150, 150),
       new THREE.MeshBasicMaterial({ opacity: 0, transparent: true })
     )
-    intersect_plane.rotation.x = Math.PI / -2
-    scene.add(intersect_plane)
+    engine.interaction.plane.rotation.x = Math.PI / -2
+    scene.add(engine.interaction.plane)
 
     // Wait a tick to ensure the renderer DOM element is available
     setTimeout(() => {
@@ -448,24 +552,40 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
   }
 
   const render = function () {
-    requestAnimationFrame(render)
-    renderer.render(scene, camera)
+    requestRef.current = requestAnimationFrame(render)
+    if (engineRef.current.renderer && sceneRef.current && engineRef.current.camera) {
+      engineRef.current.renderer.render(sceneRef.current, engineRef.current.camera)
+
+      // Physics Watchdog
+      // If physics hasn't updated in 4 seconds, restart it
+      if (settings.gameMode === 'SOLO_PRACTICE' || settings.gameMode === 'SOLO_COMPETITOR') {
+        const now = Date.now()
+        if (now - engineRef.current.lastPhysicsUpdate > 4000) {
+          console.warn('Physics stalled (>4s), restarting simulation...')
+          engineRef.current.lastPhysicsUpdate = now
+          sceneRef.current.simulate()
+        }
+      }
+    }
   }
 
-  const createTower = function (normalMat?: any, lockedMat?: any) {
+  const createTower = function () {
     const block_length = 6, block_height = 1, block_width = 1.5, block_offset = 2
     const block_geometry = new THREE.BoxGeometry(block_length, block_height, block_width)
     const sc = sceneRef.current
-    if (!sc) {
-      console.error('Scene not ready, cannot create tower')
+    const engine = engineRef.current
+
+    if (!sc || !engine.materials.block) {
+      console.error('Scene or materials not ready, cannot create tower')
       return
     }
 
     // Use cached materials if not provided (for reset)
-    const mat = normalMat || block_material
-    const lMat = lockedMat || locked_block_material || mat
+    const mat = engine.materials.block
+    const lMat = engine.materials.lockedBlock || mat
 
     const physicsConfig = getPhysicsConfig(settings.difficulty)
+    console.log('Creating tower with physics config:', physicsConfig)
 
     for (let i = 0; i < 16; i++) {
       // Determine if this layer is locked (top 2 layers: 14 and 15)
@@ -498,12 +618,14 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
 
   const resetTower = function () {
     const sc = sceneRef.current
+    const engine = engineRef.current
     if (!sc) return
+
     for (let i = 0; i < blocksRef.current.length; i++) {
       sc.remove(blocksRef.current[i])
     }
     blocksRef.current.length = 0
-    selected_block = null
+    engine.interaction.selectedBlock = null
     createTower()
     setFallenCount(0)
     setScore(0)
@@ -518,12 +640,12 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
   }
 
   const initEventHandling = function () {
+    const engine = engineRef.current
     // Check if renderer and its DOM element exist
-    if (!renderer || !renderer.domElement) {
+    if (!engine.renderer || !engine.renderer.domElement) {
       console.error('Renderer or renderer DOM element not available')
       return
     }
-
 
     const getEventPos = (evt: MouseEvent | TouchEvent) => {
       let clientX, clientY
@@ -547,18 +669,22 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
       }
 
       const { clientX, clientY } = getEventPos(evt)
-      const rect = renderer.domElement.getBoundingClientRect()
+      const rect = engine.renderer.domElement.getBoundingClientRect()
       const nx = ((clientX - rect.left) / rect.width) * 2 - 1
       const ny = -((clientY - rect.top) / rect.height) * 2 + 1
+
+      // Revert to z=1 (far plane) for consistent raycasting
       const vector = new THREE.Vector3(nx, ny, 1)
+      vector.unproject(engine.camera)
 
-      vector.unproject(camera)
+      const ray = new THREE.Raycaster(engine.camera.position, vector.sub(engine.camera.position).normalize())
 
-      const ray = new THREE.Raycaster(camera.position, vector.sub(camera.position).normalize())
+      console.log('Raycasting against', blocksRef.current.length, 'blocks')
       const intersections = ray.intersectObjects(blocksRef.current)
 
       if (intersections.length > 0) {
         const block = intersections[0].object
+        console.log('Intersection found:', block.id)
 
         // Competitor Mode: Prevent selecting top 2 levels (Layers 14 and 15)
         if (settings.gameMode === 'SOLO_COMPETITOR' && block.userData?.layer >= 14) {
@@ -566,48 +692,64 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
           return
         }
 
-        selected_block = block
-        intersect_plane.position.y = selected_block.position.y
-        const planeHit = ray.intersectObject(intersect_plane)
+        engine.interaction.selectedBlock = block
+
+        // Update intersection plane to match block height
+        engine.interaction.plane.position.y = engine.interaction.selectedBlock.position.y
+
+        const planeHit = ray.intersectObject(engine.interaction.plane)
         if (planeHit.length > 0) {
-          mouse_position.copy(planeHit[0].point)
+          console.log('Plane hit at', planeHit[0].point)
+          engine.interaction.mousePos.copy(planeHit[0].point)
           dragStartRef.current = planeHit[0].point.clone()
         } else {
+          console.log('Plane hit failed')
           dragStartRef.current = null
         }
+      } else {
+        console.log('No intersection found')
       }
     }
 
     const handleInputEnd = function (evt: MouseEvent | TouchEvent) {
-      if (selected_block !== null) {
+      if (engine.interaction.selectedBlock !== null) {
+        console.log('Input End. Selected block:', engine.interaction.selectedBlock.id)
         const start = dragStartRef.current
-        let end = mouse_position.clone()
+        let end = engine.interaction.mousePos.clone()
         if (start) {
           end.y = start.y
         }
-        const delta = new THREE.Vector3().copy(end).sub(start || selected_block.position)
+        const delta = new THREE.Vector3().copy(end).sub(start || engine.interaction.selectedBlock.position)
         delta.y = 0
         const length = delta.length()
+        console.log('Drag length:', length)
         const dir = length > 0 ? delta.normalize() : new THREE.Vector3(1, 0, 0)
         const impulse = dir.multiplyScalar(Math.max(5, Math.min(50, length * 10)))
 
-        const blockIndex = blocksRef.current.indexOf(selected_block)
+        const blockIndex = blocksRef.current.indexOf(engine.interaction.selectedBlock)
 
         if (settings.gameMode === 'SOLO_PRACTICE' || settings.gameMode === 'SOLO_COMPETITOR') {
-          if (typeof selected_block.applyCentralImpulse === 'function') {
-            selected_block.applyCentralImpulse(impulse)
+          const block = engine.interaction.selectedBlock
+          console.log('Applying impulse:', impulse, 'to block mass:', block.mass)
+
+          // Attempt to wake up the block
+          if (block.setAngularVelocity) block.setAngularVelocity(new THREE.Vector3(0, 0, 0))
+          if (block.setLinearVelocity) block.setLinearVelocity(new THREE.Vector3(0, 0, 0))
+
+          if (typeof block.applyCentralImpulse === 'function') {
+            block.applyCentralImpulse(impulse)
           } else {
-            selected_block.applyCentralForce(impulse)
+            block.applyCentralForce(impulse)
           }
         } else if (socketRef.current && blockIndex !== -1) {
           socketRef.current.emit('submitMove', {
             blockIndex: blockIndex,
             force: { x: impulse.x, y: impulse.y, z: impulse.z },
-            point: { x: selected_block.position.x, y: selected_block.position.y, z: selected_block.position.z }
+            point: { x: engine.interaction.selectedBlock.position.x, y: engine.interaction.selectedBlock.position.y, z: engine.interaction.selectedBlock.position.z }
           })
         }
 
-        selected_block = null
+        engine.interaction.selectedBlock = null
         dragStartRef.current = null
       }
     }
@@ -618,18 +760,24 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
         evt.preventDefault()
       }
 
-      if (selected_block !== null) {
+      if (engine.interaction.selectedBlock !== null) {
+        console.log('Input Move. Selected block:', engine.interaction.selectedBlock.id)
         const { clientX, clientY } = getEventPos(evt)
-        const rect = renderer.domElement.getBoundingClientRect()
+        const rect = engine.renderer.domElement.getBoundingClientRect()
         const nx = ((clientX - rect.left) / rect.width) * 2 - 1
         const ny = -((clientY - rect.top) / rect.height) * 2 + 1
+
         const vector = new THREE.Vector3(nx, ny, 1)
-        vector.unproject(camera)
-        const ray = new THREE.Raycaster(camera.position, vector.sub(camera.position).normalize())
-        intersect_plane.position.y = selected_block.position.y
-        const intersection = ray.intersectObject(intersect_plane)
+        vector.unproject(engine.camera)
+
+        const ray = new THREE.Raycaster(engine.camera.position, vector.sub(engine.camera.position).normalize())
+
+        // Ensure plane is at correct height
+        engine.interaction.plane.position.y = engine.interaction.selectedBlock.position.y
+
+        const intersection = ray.intersectObject(engine.interaction.plane)
         if (intersection.length > 0) {
-          mouse_position.copy(intersection[0].point)
+          engine.interaction.mousePos.copy(intersection[0].point)
         }
       }
     }
@@ -638,14 +786,14 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
 
 
     // Mouse events
-    renderer.domElement.addEventListener('mousedown', handleInputStart)
-    renderer.domElement.addEventListener('mousemove', handleInputMove)
-    renderer.domElement.addEventListener('mouseup', handleInputEnd)
+    engine.renderer.domElement.addEventListener('mousedown', handleInputStart)
+    engine.renderer.domElement.addEventListener('mousemove', handleInputMove)
+    engine.renderer.domElement.addEventListener('mouseup', handleInputEnd)
 
     // Touch events
-    renderer.domElement.addEventListener('touchstart', handleInputStart, { passive: false })
-    renderer.domElement.addEventListener('touchmove', handleInputMove, { passive: false })
-    renderer.domElement.addEventListener('touchend', handleInputEnd)
+    engine.renderer.domElement.addEventListener('touchstart', handleInputStart, { passive: false })
+    engine.renderer.domElement.addEventListener('touchmove', handleInputMove, { passive: false })
+    engine.renderer.domElement.addEventListener('touchend', handleInputEnd)
   }
 
   return (
