@@ -822,57 +822,48 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
       {/* Game Over Overlay for Competitor Mode */}
       {gameOver && settings.gameMode === 'SOLO_COMPETITOR' && (
         <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-          <div className="bg-gradient-to-br from-gray-900 to-gray-800 border border-white/20 p-8 rounded-2xl text-center max-w-lg w-full shadow-2xl">
+          <div className="bg-gradient-to-br from-gray-900 to-gray-800 border border-white/20 p-5 rounded-2xl text-center max-w-lg w-full shadow-2xl">
 
             {/* New High Score Celebration */}
             {score > highScore && score > 0 && (
-              <div className="mb-4 bg-gradient-to-r from-yellow-500/20 to-orange-500/20 border-2 border-yellow-400 rounded-xl p-4 animate-pulse">
-                <div className="text-2xl font-bold text-yellow-400 flex items-center justify-center gap-2">
-                  🔥 NEW HIGH SCORE! 🔥
-                </div>
-                <div className="text-sm text-yellow-200 mt-1">Previous Best: {highScore}</div>
+              <div className="mb-3 bg-gradient-to-r from-yellow-500/20 to-orange-500/20 border-2 border-yellow-400 rounded-lg p-2 animate-pulse">
+                <div className="text-lg font-bold text-yellow-400">🔥 NEW HIGH SCORE! 🔥</div>
+                <div className="text-xs text-yellow-200">Prev: {highScore}</div>
               </div>
             )}
 
-            <h2 className="text-4xl font-bold text-white mb-2">Game Over</h2>
-            <p className="text-gray-400 mb-6">The tower collapsed or time ran out!</p>
+            <h2 className="text-3xl font-bold text-white mb-1">Game Over</h2>
+            <p className="text-gray-400 mb-4 text-sm">Tower collapsed or time ran out</p>
 
-            {/* Score Display */}
-            <div className="bg-white/5 rounded-xl p-6 mb-6">
-              <div className="text-sm text-gray-400 uppercase tracking-wider mb-1">Final Score</div>
-              <div className="text-6xl font-bold text-yellow-400">{score}</div>
-              <div className="text-sm text-gray-500 mt-2">Difficulty: <span className="text-white font-semibold">{settings.difficulty}</span></div>
+            {/* Score & Rank Compact */}
+            <div className="bg-white/5 rounded-lg p-4 mb-4">
+              <div className="grid grid-cols-3 gap-2">
+                <div className="text-center">
+                  <div className="text-xs text-gray-400 mb-1">Score</div>
+                  <div className="text-4xl font-bold text-yellow-400">{score}</div>
+                </div>
+                <div className="text-center border-l border-r border-white/10">
+                  <div className="text-xs text-gray-400 mb-1">Rank</div>
+                  <div className="text-2xl font-bold text-blue-400">#{rank > 0 ? rank : '—'}</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-xs text-gray-400 mb-1">{settings.difficulty}</div>
+                  <div className="text-lg font-semibold text-purple-400">{totalPlayers}</div>
+                </div>
+              </div>
             </div>
 
-            {/* Rank & Stats */}
-            {rank > 0 && totalPlayers > 0 && (
-              <div className="grid grid-cols-2 gap-3 mb-6">
-                <div className="bg-white/5 rounded-lg p-4">
-                  <div className="text-xs text-gray-400 uppercase mb-1">Your Rank</div>
-                  <div className="text-2xl font-bold text-blue-400">
-                    #{rank}
-                  </div>
-                </div>
-                <div className="bg-white/5 rounded-lg p-4">
-                  <div className="text-xs text-gray-400 uppercase mb-1">Total Players</div>
-                  <div className="text-2xl font-bold text-purple-400">
-                    {totalPlayers}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Top 3 Preview */}
+            {/* Leaderboard - Top 2 only */}
             {topScores && topScores.length > 0 && (
-              <div className="bg-white/5 rounded-xl p-4 mb-6">
-                <div className="text-xs text-gray-400 uppercase tracking-wider mb-3">Top Players ({settings.difficulty})</div>
-                <div className="space-y-2">
-                  {topScores.slice(0, 3).map((entry, idx) => (
-                    <div key={idx} className="flex items-center justify-between text-sm">
-                      <div className="flex items-center gap-2">
-                        <span className="text-lg">{idx === 0 ? '🥇' : idx === 1 ? '🥈' : '🥉'}</span>
-                        <span className="text-gray-300 font-mono">
-                          {entry.player.slice(0, 6)}...{entry.player.slice(-4)}
+              <div className="bg-white/5 rounded-lg p-3 mb-4">
+                <div className="text-xs text-gray-400 uppercase tracking-wider mb-2">Top Players</div>
+                <div className="space-y-1.5">
+                  {topScores.slice(0, 2).map((entry, idx) => (
+                    <div key={idx} className="flex items-center justify-between text-xs">
+                      <div className="flex items-center gap-2 flex-1">
+                        <span>{idx === 0 ? '🥇' : '🥈'}</span>
+                        <span className="text-gray-300 font-mono text-xs">
+                          {entry.player.slice(0, 4)}...{entry.player.slice(-3)}
                         </span>
                       </div>
                       <span className="text-yellow-400 font-bold">{entry.score}</span>
@@ -895,35 +886,37 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
             )}
 
             {/* Actions */}
-            <div className="space-y-3">
+            <div className="flex gap-2 flex-col">
               <button
                 onClick={() => submitScore(settings.difficulty, score)}
                 disabled={isSubmitting || isConfirmingScore || isScoreConfirmed}
-                className={`w-full font-bold py-3 rounded-lg transition-all transform ${isScoreConfirmed
+                className={`flex-1 font-bold py-2 rounded-lg transition-all transform text-sm ${isScoreConfirmed
                   ? 'bg-green-600 text-white cursor-default'
                   : 'bg-gradient-to-r from-yellow-600 to-orange-600 hover:from-yellow-500 hover:to-orange-500 text-white hover:scale-105'
                   } disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none`}
               >
                 {isSubmitting ? '⏳ Check Wallet...' :
-                  isConfirmingScore ? '⛓️ Confirming on Blockchain...' :
-                    isScoreConfirmed ? '✅ Score Submitted!' : '💎 Submit Score (On-Chain)'}
+                  isConfirmingScore ? '⛓️ Confirming...' :
+                    isScoreConfirmed ? '✅ Submitted!' : '💎 Submit Score'}
               </button>
 
-              <button
-                onClick={resetTower}
-                className="w-full bg-white/10 hover:bg-white/20 text-white font-semibold py-3 rounded-lg transition-colors"
-              >
-                🔄 Try Again
-              </button>
-
-              {onExit && (
+              <div className="flex gap-2">
                 <button
-                  onClick={onExit}
-                  className="w-full bg-white/5 hover:bg-white/10 text-gray-300 font-semibold py-3 rounded-lg transition-colors"
+                  onClick={resetTower}
+                  className="flex-1 bg-white/10 hover:bg-white/20 text-white font-semibold py-2 rounded-lg transition-colors text-sm"
                 >
-                  🚪 Exit to Menu
+                  🔄 Again
                 </button>
-              )}
+
+                {onExit && (
+                  <button
+                    onClick={onExit}
+                    className="flex-1 bg-white/5 hover:bg-white/10 text-gray-300 font-semibold py-2 rounded-lg transition-colors text-sm"
+                  >
+                    🚪 Menu
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         </div>
