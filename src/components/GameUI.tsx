@@ -1,7 +1,7 @@
 import React from 'react'
 import { ConnectButton } from '@rainbow-me/rainbowkit'
 
-export type GameState = 'WAITING' | 'ACTIVE' | 'VOTING' | 'ENDED'
+export type GameState = 'WAITING' | 'ACTIVE' | 'VOTING' | 'ENDED' | 'COLLAPSED'
 
 export interface Player {
     id: string
@@ -156,8 +156,8 @@ export default function GameUI({
                 </div>
             </div>
 
-            {/* Center: Timer (only in SOLO_COMPETITOR mode) */}
-            {gameState === 'ACTIVE' && gameMode === 'SOLO_COMPETITOR' && (
+            {/* Center: Timer (SOLO_COMPETITOR and MULTIPLAYER modes) */}
+            {gameState === 'ACTIVE' && timeLeft !== undefined && (gameMode === 'SOLO_COMPETITOR' || gameMode === 'MULTIPLAYER') && (
                 <div className="absolute top-24 left-1/2 -translate-x-1/2 pointer-events-none flex flex-col items-center gap-2">
                     <div className={`text-4xl font-black drop-shadow-lg transition-colors duration-300 ${timeLeft <= 10 ? 'text-red-500 animate-pulse' : 'text-white'
                         }`}>
@@ -166,7 +166,7 @@ export default function GameUI({
                     {/* Timer Bar */}
                     <div className="w-64 h-2 bg-black/50 rounded-full overflow-hidden backdrop-blur-sm border border-white/10">
                         <div
-                            className={`h-full transition-all duration-1000 ease-linear ${timeLeft <= 10 ? 'bg-red-500' : 'bg-white'}`}
+                            className={`h-full transition-all duration-1000 ease-linear ${timeLeft <= 10 ? 'bg-red-500' : 'bg-blue-400'}`}
                             style={{ width: `${(timeLeft / 30) * 100}%` }}
                         />
                     </div>

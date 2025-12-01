@@ -75,8 +75,8 @@ export default function GameSettings({ onStart }: GameSettingsProps) {
             {([
               { key: 'SOLO_PRACTICE', title: 'Solo Practice', desc: 'Relaxed physics playground', icon: '🎯', disabled: false },
               { key: 'SOLO_COMPETITOR', title: 'Solo Competitor', desc: 'Ranked time-attack mode', icon: '🏆', disabled: false },
-              { key: 'SINGLE_VS_AI', title: 'Single vs AI', desc: 'Challenge computer opponents', icon: '🤖', disabled: isProduction },
-              { key: 'MULTIPLAYER', title: 'Multiplayer', desc: 'Play with other humans', icon: '👥', disabled: isProduction }
+              { key: 'SINGLE_VS_AI', title: 'Single vs AI', desc: 'Challenge computer opponents', icon: '🤖', disabled: true }, // TODO: Implement AI
+              { key: 'MULTIPLAYER', title: 'Multiplayer', desc: 'Play with other humans', icon: '👥', disabled: false }
             ] as const).map((mode) => (
               <button
                 key={mode.key}

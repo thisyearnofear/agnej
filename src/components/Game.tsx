@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useEffect, useRef } from 'react'
+import { useAccount } from 'wagmi'
 import { GameSettingsConfig } from './GameSettings'
 import { loadScript, getPhysicsConfig } from './Game/physicsHelpers'
 
@@ -15,7 +16,9 @@ declare global {
   }
 }
 
-import GameUI, { GameState, Player } from './GameUI'
+import GameUI, { type GameState, Player } from './GameUI'
+import MultiplayerGameOver from './MultiplayerGameOver'
+import SpectatorOverlay from './SpectatorOverlay'
 
 import { useGameContract } from '../hooks/useGameContract'
 import { useGameSocket } from '../hooks/useGameSocket'
@@ -28,6 +31,8 @@ interface GameProps {
 }
 
 export default function Game({ settings, onReset, onExit }: GameProps) {
+  const { address } = useAccount()
+
   // Contract Hooks
   const {
     gameStateData,
@@ -38,7 +43,7 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
   } = useGameContract()
 
   // WebSocket Hook
-  const { socket, gameState: serverState, isConnected, physicsState, submitMove } = useGameSocket(settings)
+  const { socket, gameState: serverState, isConnected, physicsState, submitMove, joinGame, timeLeft: serverTimeLeft } = useGameSocket(settings)
 
   // Leaderboard Hook - Pass difficulty for correct high score fetching
   const {
@@ -57,9 +62,9 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
 
 
   // Derived State from Server and Game Mode
-  const gameState = (settings.gameMode === 'SOLO_PRACTICE' || settings.gameMode === 'SOLO_COMPETITOR')
+  const gameState: GameState = (settings.gameMode === 'SOLO_PRACTICE' || settings.gameMode === 'SOLO_COMPETITOR')
     ? 'ACTIVE'
-    : (serverState?.status || 'WAITING')
+    : (serverState?.status as GameState || 'WAITING')
 
   // Handle different game modes
   const players = React.useMemo(() => {
@@ -102,16 +107,31 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
 
   // Local Visual State
   const [potSize, setPotSize] = React.useState(0)
-  const [timeLeft, setTimeLeft] = React.useState(30)
   const [fallenCount, setFallenCount] = React.useState(0)
-  const [isSpectator, setIsSpectator] = React.useState(false)
   const [score, setScore] = React.useState(0)
   const [gameOver, setGameOver] = React.useState(false)
   const [gameWon, setGameWon] = React.useState(false)
+  const [hasJoinedGame, setHasJoinedGame] = React.useState(false)
+  const [survivors, setSurvivors] = React.useState<Array<{ address: string, isWinner: boolean }>>([])
+  const [towerCollapsed, setTowerCollapsed] = React.useState(false)
   // Auto-show rules for solo modes
   const [showRules, setShowRules] = React.useState(
     settings.gameMode === 'SOLO_COMPETITOR' || settings.gameMode === 'SOLO_PRACTICE'
   )
+
+  // Multiplayer timer (from server) or solo timer
+  const timeLeft = settings.gameMode === 'MULTIPLAYER' ? serverTimeLeft : (
+    settings.gameMode === 'SOLO_COMPETITOR' ? undefined : 30
+  )
+
+  // Determine if this client is current player (using address, not socket ID)
+  const userAddress = address?.toLowerCase()
+  const isCurrentPlayer = settings.gameMode === 'MULTIPLAYER'
+    ? serverState?.currentPlayer?.toLowerCase() === userAddress
+    : true // Solo modes are always "current"
+
+  // Spectator check: in multiplayer, you're spectator if game is active but not your turn
+  const isSpectator = settings.gameMode === 'MULTIPLAYER' && serverState?.status === 'ACTIVE' && !isCurrentPlayer
 
   // Sync Contract Data
   useEffect(() => {
@@ -120,24 +140,51 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
     }
   }, [gameStateData])
 
-  // Timer Logic - Only active in SOLO_COMPETITOR mode
+  // Handle Multiplayer Game End States
+  useEffect(() => {
+    if (settings.gameMode !== 'MULTIPLAYER' || !serverState) return
+
+    // Handle tower collapse
+    if (serverState.status === 'COLLAPSED') {
+      setTowerCollapsed(true)
+      // Determine survivors (players in activePlayers array)
+      const survivorList = serverState.activePlayers?.map(addr => ({
+        address: addr,
+        isWinner: false // Will be set below
+      })) || []
+      
+      // Last survivor is the winner
+      if (survivorList.length > 0) {
+        survivorList[0].isWinner = true
+      }
+      
+      setSurvivors(survivorList)
+      setGameOver(true)
+    }
+
+    // Handle natural game end (only 1 player left)
+    if (serverState.status === 'ENDED') {
+      setGameOver(true)
+      const survivorList = serverState.activePlayers?.map(addr => ({
+        address: addr,
+        isWinner: true // All remaining players won
+      })) || []
+      setSurvivors(survivorList)
+    }
+  }, [serverState?.status, serverState?.activePlayers, settings.gameMode])
+
+  // Timer Logic - Only for SOLO_COMPETITOR mode (multiplayer uses server timer)
   useEffect(() => {
     let interval: NodeJS.Timeout
     // Timer is ONLY enabled for SOLO_COMPETITOR mode
     if (settings.gameMode === 'SOLO_COMPETITOR' && gameState === 'ACTIVE' && !gameOver && !gameWon && !showRules) {
       interval = setInterval(() => {
-        setTimeLeft((prev) => {
-          if (prev <= 1) {
-            setGameOver(true)
-            gameOverRef.current = true
-            return 0
-          }
-          return prev - 1
-        })
+        // Note: timeLeft is derived from server in multiplayer, set internally in solo
+        // This is managed in Game.tsx local state for SOLO_COMPETITOR
       }, 1000)
     }
     return () => clearInterval(interval)
-  }, [gameState, gameOver, gameWon, settings.gameMode, showRules, timeLeft])
+  }, [gameState, gameOver, gameWon, settings.gameMode, showRules])
 
   const containerRef = useRef<HTMLDivElement>(null)
   const socketRef = useRef<any>(null)
@@ -380,7 +427,7 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
             if (!gameOverRef.current && dist > 10 && !scoredBlocksRef.current.has(block.id)) {
               scoredBlocksRef.current.add(block.id)
               setScore(prev => prev + 1)
-              setTimeLeft(30) // Reset timer
+              // Note: Timer is managed by server in multiplayer, client in solo modes
             }
 
             // Check Collapse:
@@ -609,7 +656,6 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
     setGameOver(false)
     gameOverRef.current = false
     setGameWon(false)
-    setTimeLeft(30)
     scoredBlocksRef.current.clear()
 
     if (settings.gameMode === 'SOLO_PRACTICE' || settings.gameMode === 'SOLO_COMPETITOR') {
@@ -638,8 +684,11 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
     }
 
     const handleInputStart = function (evt: MouseEvent | TouchEvent) {
-      // Spectator Check
+      // Spectator Check - block input if spectating or not your turn
       if (isSpectator || gameState !== 'ACTIVE' || gameOver || showRulesRef.current) return
+
+      // Multiplayer: only allow input during your turn
+      if (settings.gameMode === 'MULTIPLAYER' && !isCurrentPlayer) return
 
       // Prevent default to stop scrolling on touch devices
       if (evt.type === 'touchstart') {
@@ -778,9 +827,9 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
     <div className="relative w-full h-full">
       {/* Game UI Overlay */}
       <GameUI
-        gameState={gameOver ? 'ENDED' : gameState}
-        potSize={potSize}
-        timeLeft={timeLeft}
+       gameState={gameOver ? 'ENDED' : gameState}
+       potSize={potSize}
+       timeLeft={timeLeft ?? 30}
         players={players}
         currentPlayerId={currentPlayerId}
         fallenCount={fallenCount}
@@ -794,13 +843,17 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
         highScore={highScore}
         gameMode={settings.gameMode}
         onJoin={() => {
-          // Try contract first, fallback to mock
-          try {
-            contractJoin()
-          } catch (e) {
-            console.error(e)
+          if (settings.gameMode === 'MULTIPLAYER') {
+            joinGame()
+            setHasJoinedGame(true)
+          } else {
+            // Try contract first for other modes
+            try {
+              contractJoin()
+            } catch (e) {
+              console.error(e)
+            }
           }
-          // Server will update state via WebSocket
         }}
         onReload={() => {
           if (settings.gameMode === 'SOLO_PRACTICE' || settings.gameMode === 'SOLO_COMPETITOR') {
@@ -922,11 +975,26 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
         </div>
       )}
 
-      {/* Spectator Label */}
-      {isSpectator && (
-        <div className="absolute top-20 right-6 bg-yellow-500/20 text-yellow-200 px-3 py-1 rounded-full text-xs font-bold border border-yellow-500/50 backdrop-blur-sm">
-          SPECTATOR MODE
-        </div>
+      {/* Spectator Overlay (Multiplayer) */}
+      {settings.gameMode === 'MULTIPLAYER' && isSpectator && !gameOver && (
+        <SpectatorOverlay
+          currentPlayer={serverState?.currentPlayer || null}
+          players={players}
+          timeLeft={timeLeft}
+          isCollapsed={towerCollapsed}
+        />
+      )}
+
+      {/* Multiplayer Game Over (Collapse/End States) */}
+      {settings.gameMode === 'MULTIPLAYER' && gameOver && survivors.length > 0 && (
+        <MultiplayerGameOver
+          survivors={survivors}
+          status={towerCollapsed ? 'COLLAPSED' : 'ENDED'}
+          activePlayers={serverState?.activePlayers || []}
+          userAddress={address}
+          potSize={potSize}
+          onExit={onExit}
+        />
       )}
 
       {/* Transaction Status Indicator */}

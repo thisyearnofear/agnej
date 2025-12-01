@@ -20,29 +20,41 @@ const io = new Server(server, {
 });
 
 const PORT = process.env.PORT || 3001;
+const TURN_DURATION_MS = 30000; // 30 seconds per turn
 
 // Game State (In-Memory for MVP)
 interface GameState {
     id: number;
-    players: string[];
-    currentPlayer: string | null;
-    status: 'WAITING' | 'ACTIVE' | 'ENDED';
+    players: string[]; // Wallet addresses
+    playerSockets: Map<string, string>; // Address -> Socket.io ID mapping
+    currentPlayerIndex: number; // Track index for round-robin turns
+    currentPlayer: string | null; // Wallet address of current player
+    status: 'WAITING' | 'ACTIVE' | 'ENDED' | 'COLLAPSED';
     maxPlayers: number;
     difficulty: 'EASY' | 'MEDIUM' | 'HARD';
     stake: number;
     isPractice: boolean;
-    // Physics state would go here
+    turnStartTime: number;
+    turnDeadline: number;
+    activePlayers: Set<string>; // Wallet addresses of players still in game
+    pendingMoves: Map<string, any>; // Queue moves during wrong player's turn
 }
 
 let currentGameState: GameState = {
     id: 0,
     players: [],
+    playerSockets: new Map(),
+    currentPlayerIndex: 0,
     currentPlayer: null,
     status: 'WAITING',
     maxPlayers: 7,
     difficulty: 'MEDIUM',
     stake: 1,
-    isPractice: false
+    isPractice: false,
+    turnStartTime: 0,
+    turnDeadline: 0,
+    activePlayers: new Set(),
+    pendingMoves: new Map()
 };
 
 // Initialize Blockchain Service
@@ -75,22 +87,90 @@ blockchain.listenToEvents({
 // Initialize Physics
 let physics = new PhysicsWorld('MEDIUM');
 
-// Physics Loop (60 FPS)
-setInterval(() => {
+// Turn Management Helper
+function getNextPlayer(): string | null {
+    if (currentGameState.activePlayers.size === 0) return null;
+    
+    const activePlayers = Array.from(currentGameState.activePlayers);
+    currentGameState.currentPlayerIndex = (currentGameState.currentPlayerIndex + 1) % activePlayers.length;
+    return activePlayers[currentGameState.currentPlayerIndex];
+}
+
+function startTurn(): void {
+    if (currentGameState.activePlayers.size <= 1) {
+        currentGameState.status = 'ENDED';
+        io.emit('gameState', sanitizeGameState(currentGameState));
+        console.log('Game ended - only 1 player left');
+        return;
+    }
+
+    const nextPlayer = getNextPlayer();
+    if (!nextPlayer) return;
+
+    currentGameState.currentPlayer = nextPlayer;
+    currentGameState.turnStartTime = Date.now();
+    currentGameState.turnDeadline = currentGameState.turnStartTime + TURN_DURATION_MS;
+
+    console.log(`Turn started for ${nextPlayer.slice(0, 6)}...`);
+    io.emit('gameState', sanitizeGameState(currentGameState));
+    io.emit('turnChanged', {
+        player: nextPlayer,
+        deadline: currentGameState.turnDeadline
+    });
+}
+
+function endTurn(): void {
+    // Process any pending moves queued for this player
+    if (currentGameState.currentPlayer && currentGameState.pendingMoves.has(currentGameState.currentPlayer)) {
+        const move = currentGameState.pendingMoves.get(currentGameState.currentPlayer);
+        currentGameState.pendingMoves.delete(currentGameState.currentPlayer);
+        physics.applyForce(move.blockIndex, move.force, move.point);
+    }
+
+    startTurn(); // Auto-advance to next player
+}
+
+function sanitizeGameState(state: GameState) {
+    return {
+        id: state.id,
+        players: state.players,
+        currentPlayer: state.currentPlayer,
+        status: state.status,
+        maxPlayers: state.maxPlayers,
+        difficulty: state.difficulty,
+        stake: state.stake,
+        isPractice: state.isPractice,
+        activePlayers: Array.from(state.activePlayers),
+        turnDeadline: state.turnDeadline
+    };
+}
+
+// Physics & Game Loop (60 FPS)
+const gameLoopInterval = setInterval(() => {
     if (currentGameState.status === 'ACTIVE') {
         physics.step(1 / 60);
 
-        // Broadcast State (Optimization: Only send if changed or at lower rate)
+        // Check Collapse
+        if (physics.checkCollapse()) {
+            console.log('Collapse Detected!');
+            currentGameState.status = 'COLLAPSED';
+            io.emit('gameCollapsed', {
+                survivors: Array.from(currentGameState.activePlayers)
+            });
+            io.emit('gameState', sanitizeGameState(currentGameState));
+            return;
+        }
+
+        // Broadcast physics state (60 FPS)
         const physicsState = physics.getState();
         io.emit('physicsUpdate', physicsState);
 
-        // Check Collapse
-        if (physics.checkCollapse()) {
-            // Trigger Collapse Logic
-            console.log('Collapse Detected!');
-            // blockchain.reportCollapse(currentGameState.id);
-            currentGameState.status = 'ENDED'; // Temporary
-            io.emit('gameState', currentGameState);
+        // Check turn timeout (every frame but only acts when deadline passes)
+        const now = Date.now();
+        if (currentGameState.turnDeadline > 0 && now >= currentGameState.turnDeadline) {
+            console.log('Turn timeout - advancing to next player');
+            currentGameState.turnDeadline = 0; // Reset to prevent re-triggering
+            endTurn();
         }
     }
 }, 1000 / 60);
@@ -99,10 +179,31 @@ io.on('connection', (socket) => {
     console.log('Client connected:', socket.id);
 
     // Send initial state
-    socket.emit('gameState', currentGameState);
+    socket.emit('gameState', sanitizeGameState(currentGameState));
 
     socket.on('disconnect', () => {
         console.log('Client disconnected:', socket.id);
+        // Find which player this socket belongs to
+        let disconnectedAddress: string | null = null;
+        for (const [address, sockId] of currentGameState.playerSockets.entries()) {
+            if (sockId === socket.id) {
+                disconnectedAddress = address;
+                currentGameState.playerSockets.delete(address);
+                break;
+            }
+        }
+
+        // Remove player from active players
+        if (disconnectedAddress && currentGameState.activePlayers.has(disconnectedAddress)) {
+            currentGameState.activePlayers.delete(disconnectedAddress);
+            console.log(`Removed ${disconnectedAddress} from active players. Remaining: ${currentGameState.activePlayers.size}`);
+            
+            // If only 1 player left, end the game
+            if (currentGameState.activePlayers.size <= 1 && currentGameState.status === 'ACTIVE') {
+                currentGameState.status = 'ENDED';
+                io.emit('gameState', sanitizeGameState(currentGameState));
+            }
+        }
     });
 
     // Handle Game Creation with Settings
@@ -112,31 +213,86 @@ io.on('connection', (socket) => {
         currentGameState = {
             id: Date.now(),
             players: [],
+            playerSockets: new Map(),
+            currentPlayerIndex: 0,
             currentPlayer: null,
-            status: 'ACTIVE',
+            status: 'WAITING',
             maxPlayers: config.maxPlayers,
             difficulty: config.difficulty as 'EASY' | 'MEDIUM' | 'HARD',
             stake: config.stake,
-            isPractice: config.isPractice
+            isPractice: config.isPractice,
+            turnStartTime: 0,
+            turnDeadline: 0,
+            activePlayers: new Set(),
+            pendingMoves: new Map()
         };
 
         // Re-initialize physics with new difficulty
         physics = new PhysicsWorld(currentGameState.difficulty);
 
         // Broadcast new game state
-        io.emit('gameState', currentGameState);
+        io.emit('gameState', sanitizeGameState(currentGameState));
+        console.log('Game created with ID:', currentGameState.id);
+    });
+
+    // Handle Player Join
+    socket.on('joinGame', (playerAddress: string) => {
+        console.log('Player joining:', playerAddress, 'with socket:', socket.id);
+
+        if (!currentGameState.players.includes(playerAddress)) {
+            currentGameState.players.push(playerAddress);
+            currentGameState.playerSockets.set(playerAddress, socket.id);
+            currentGameState.activePlayers.add(playerAddress);
+        }
+
+        // Auto-start if we have enough players
+        if (currentGameState.status === 'WAITING' && currentGameState.activePlayers.size >= 2) {
+            currentGameState.status = 'ACTIVE';
+            startTurn(); // Begin first turn
+        } else {
+            io.emit('gameState', sanitizeGameState(currentGameState));
+        }
     });
 
     // Handle Physics Moves
-    socket.on('submitMove', async (data: { blockIndex: number, force: any, point: any }) => {
-        console.log('Move received:', data);
+    socket.on('submitMove', (data: { blockIndex: number, force: any, point: any }) => {
+        // Find which player this socket belongs to
+        let playerAddress: string | null = null;
+        for (const [address, sockId] of currentGameState.playerSockets.entries()) {
+            if (sockId === socket.id) {
+                playerAddress = address;
+                break;
+            }
+        }
 
-        if (currentGameState.status === 'ACTIVE') {
-            // Apply force to physics world
-            physics.applyForce(data.blockIndex, data.force, data.point);
+        if (!playerAddress) {
+            console.warn('Move from unknown player socket:', socket.id);
+            return;
+        }
 
-            // Complete turn on chain (debounced in real app)
-            // await blockchain.completeTurn(currentGameState.id);
+        // Only process if this player's turn
+        if (currentGameState.currentPlayer === playerAddress) {
+            if (currentGameState.status === 'ACTIVE') {
+                physics.applyForce(data.blockIndex, data.force, data.point);
+                console.log(`Move applied for ${playerAddress.slice(0, 6)}...`);
+            }
+        } else {
+            // Queue move for later (optional - discard for now)
+            console.log(`Move queued for ${playerAddress.slice(0, 6)}... (not their turn)`);
+        }
+    });
+
+    // Handle Player Surrender/Elimination
+    socket.on('surrender', (playerAddress: string) => {
+        if (currentGameState.activePlayers.has(playerAddress)) {
+            currentGameState.activePlayers.delete(playerAddress);
+            console.log(`${playerAddress} surrendered. Active players: ${currentGameState.activePlayers.size}`);
+
+            if (currentGameState.activePlayers.size <= 1) {
+                currentGameState.status = 'ENDED';
+            }
+
+            io.emit('gameState', sanitizeGameState(currentGameState));
         }
     });
 });
