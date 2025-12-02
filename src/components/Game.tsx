@@ -152,12 +152,12 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
         address: addr,
         isWinner: false // Will be set below
       })) || []
-      
+
       // Last survivor is the winner
       if (survivorList.length > 0) {
         survivorList[0].isWinner = true
       }
-      
+
       setSurvivors(survivorList)
       setGameOver(true)
     }
@@ -684,8 +684,14 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
     }
 
     const handleInputStart = function (evt: MouseEvent | TouchEvent) {
+      // Auto-close rules dialog on mobile if user tries to interact
+      if (showRulesRef.current) {
+        setShowRules(false)
+        return
+      }
+
       // Spectator Check - block input if spectating or not your turn
-      if (isSpectator || gameState !== 'ACTIVE' || gameOver || showRulesRef.current) return
+      if (isSpectator || gameState !== 'ACTIVE' || gameOver) return
 
       // Multiplayer: only allow input during your turn
       if (settings.gameMode === 'MULTIPLAYER' && !isCurrentPlayer) return
@@ -827,9 +833,9 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
     <div className="relative w-full h-full">
       {/* Game UI Overlay */}
       <GameUI
-       gameState={gameOver ? 'ENDED' : gameState}
-       potSize={potSize}
-       timeLeft={timeLeft ?? 30}
+        gameState={gameOver ? 'ENDED' : gameState}
+        potSize={potSize}
+        timeLeft={timeLeft ?? 30}
         players={players}
         currentPlayerId={currentPlayerId}
         fallenCount={fallenCount}
