@@ -10,6 +10,7 @@ export interface GameSettingsConfig {
   difficulty: 'EASY' | 'MEDIUM' | 'HARD'
   stake: number
   showHelpers: boolean
+  isHost?: boolean
 }
 
 interface GameSettingsProps {
@@ -24,6 +25,7 @@ export default function GameSettings({ onStart }: GameSettingsProps) {
   const [stake, setStake] = useState(1)
   const [showHelpers, setShowHelpers] = useState(false)
   const [showLeaderboard, setShowLeaderboard] = useState(false)
+  const [isHost, setIsHost] = useState(true)
 
   const handleStart = () => {
     const settings: GameSettingsConfig = {
@@ -32,7 +34,8 @@ export default function GameSettings({ onStart }: GameSettingsProps) {
       aiOpponentCount: gameMode === 'SINGLE_VS_AI' ? aiOpponentCount : undefined,
       difficulty,
       stake: (gameMode === 'SOLO_PRACTICE' || gameMode === 'SOLO_COMPETITOR') ? 0 : stake,
-      showHelpers
+      showHelpers,
+      isHost: gameMode === 'MULTIPLAYER' ? isHost : true
     }
     onStart(settings)
   }
@@ -153,22 +156,50 @@ export default function GameSettings({ onStart }: GameSettingsProps) {
             {gameMode === 'MULTIPLAYER' && (
               <div>
                 <label className="block text-white font-semibold mb-2 text-sm">
-                  Human Players: <span className="text-blue-400">{playerCount}</span>
+                  Game Action
                 </label>
-                <div className="flex gap-2">
-                  {[2, 3, 4, 5, 6, 7].map((count) => (
-                    <button
-                      key={count}
-                      onClick={() => setPlayerCount(count)}
-                      className={`flex-1 py-2 rounded-lg font-semibold text-sm transition-all ${playerCount === count
-                        ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/20'
-                        : 'bg-white/5 text-gray-400 hover:bg-white/10'
-                        }`}
-                    >
-                      {count}
-                    </button>
-                  ))}
+                <div className="flex gap-2 mb-4">
+                  <button
+                    onClick={() => setIsHost(true)}
+                    className={`flex-1 py-2 rounded-lg font-semibold text-sm transition-all ${isHost
+                      ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/20'
+                      : 'bg-white/5 text-gray-400 hover:bg-white/10'
+                      }`}
+                  >
+                    Create Game
+                  </button>
+                  <button
+                    onClick={() => setIsHost(false)}
+                    className={`flex-1 py-2 rounded-lg font-semibold text-sm transition-all ${!isHost
+                      ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/20'
+                      : 'bg-white/5 text-gray-400 hover:bg-white/10'
+                      }`}
+                  >
+                    Join Game
+                  </button>
                 </div>
+
+                {isHost && (
+                  <>
+                    <label className="block text-white font-semibold mb-2 text-sm">
+                      Max Players: <span className="text-blue-400">{playerCount}</span>
+                    </label>
+                    <div className="flex gap-2">
+                      {[2, 3, 4, 5, 6, 7].map((count) => (
+                        <button
+                          key={count}
+                          onClick={() => setPlayerCount(count)}
+                          className={`flex-1 py-2 rounded-lg font-semibold text-sm transition-all ${playerCount === count
+                            ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/20'
+                            : 'bg-white/5 text-gray-400 hover:bg-white/10'
+                            }`}
+                        >
+                          {count}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
               </div>
             )}
 
@@ -280,7 +311,11 @@ export default function GameSettings({ onStart }: GameSettingsProps) {
               onClick={handleStart}
               className="w-full mt-6 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white font-bold py-3 rounded-xl transition-all active:scale-95 shadow-lg shadow-blue-900/30 flex items-center justify-center gap-2"
             >
-              <span>{gameMode === 'SOLO_PRACTICE' ? 'Start Practice' : 'Start Game'}</span>
+              <span>
+                {gameMode === 'SOLO_PRACTICE' ? 'Start Practice' :
+                  gameMode === 'MULTIPLAYER' ? (isHost ? 'Create Game' : 'Join Game') :
+                    'Start Game'}
+              </span>
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M5 12h14" />
                 <path d="m12 5 7 7-7 7" />

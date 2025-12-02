@@ -43,10 +43,10 @@ Open [http://localhost:3000](http://localhost:3000)
 
 ## 📚 Documentation
 
-- **[Game Mechanics](docs/GAME_MECHANICS.md)** - Tower structure, gameplay loops, scoring
-- **[Architecture](docs/ARCHITECTURE.md)** - System design, physics engine, smart contracts
-- **[Setup & Development](docs/SETUP.md)** - Installation, building, deployment
-- **[Roadmap](docs/ROADMAP.md)** - Product vision, phases, timeline
+- **[Architecture & Setup](docs/ARCHITECTURE_AND_SETUP.md)** - System design, physics engine, smart contracts, and development setup
+- **[Game Mechanics & Rules](docs/GAME_MECHANICS_AND_RULES.md)** - Tower structure, gameplay loops, scoring, and game modes
+- **[Mobile Features](docs/MOBILE_FEATURES.md)** - Mobile optimization, touch controls, and user experience enhancements
+- **[Multiplayer & Development](docs/MULTIPLAYER_AND_DEVELOPMENT.md)** - Multiplayer implementation, testing, and product roadmap
 
 ## ✨ Key Features
 

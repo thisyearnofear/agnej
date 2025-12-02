@@ -1,6 +1,79 @@
-# Mobile Touch Controls Enhancement - Summary
+# Mobile Features & Optimization
 
-## Your Question: "Is it easy/doable for users to actually play the game on mobile and move the blocks with ease?"
+## Mobile Gameplay Optimization
+
+### Problem
+Users were reporting that they couldn't move blocks on mobile because a dialog in the middle of the screen was blocking gameplay. The specific issues were:
+
+1. **Rules dialog blocking touch interactions** - The help/rules dialog overlay was covering the entire game area with `absolute inset-0`, preventing users from interacting with blocks
+2. **Dialog not dismissing easily** - Users had to manually close the dialog, which wasn't obvious on mobile
+3. **Poor mobile UX** - The dialog was too large and intrusive on small screens
+
+### Solution Implemented
+
+#### 1. Auto-Dismiss on Touch Interaction ✅
+**File: `src/components/Game.tsx`**
+- Added logic to automatically close the rules dialog when users try to touch/click blocks
+- When the dialog is open and user taps the game area, it now:
+  - Closes the dialog immediately
+  - Returns early (doesn't process the touch as a block interaction on first tap)
+  - Allows the next touch to work normally
+
+```typescript
+const handleInputStart = function (evt: MouseEvent | TouchEvent) {
+  // Auto-close rules dialog on mobile if user tries to interact
+  if (showRulesRef.current) {
+    setShowRules(false)
+    return
+  }
+  // ... rest of the interaction logic
+}
+```
+
+#### 2. Mobile-Optimized Dialog Design ✅
+**File: `src/components/GameUI.tsx`**
+
+##### Visual Improvements:
+- **Warning Banner**: Added a yellow warning banner on mobile that clearly states "⚠️ This dialog is blocking gameplay - Tap anywhere outside to close"
+- **Prominent Close Button**: Made the X button more visible with a red background (`bg-red-500/20`)
+- **Better Border**: Changed to a yellow border (`border-2 border-yellow-500/50`) to make it more noticeable
+- **Darker Overlay**: Increased overlay opacity from `bg-black/80` to `bg-black/90` for better contrast
+
+##### Responsive Sizing:
+- **Compact on Mobile**: Reduced padding from `p-8` to `p-4` on mobile (`p-4 md:p-8`)
+- **Smaller Text**: Made headings and text smaller on mobile (`text-xs md:text-sm`, `text-sm md:text-base`)
+- **Smaller Icons**: Reduced icon size from 24px to 20px on mobile
+- **Tighter Spacing**: Reduced gap between sections (`gap-2 md:gap-4`, `space-y-3 md:space-y-6`)
+- **Scrollable**: Added `max-h-[90vh] overflow-y-auto` to prevent dialog from being taller than screen
+
+##### Better CTA Button:
+- Changed from plain button to gradient: `bg-gradient-to-r from-green-600 to-blue-600`
+- More engaging text: "✨ LET'S EXPLORE!" and "⚡ START PLAYING" instead of generic "ACKNOWLEDGED"
+- Added hover scale effect for better feedback
+
+#### 3. Smaller Help Button on Mobile ✅
+**File: `src/components/GameUI.tsx`**
+- Reduced button size on mobile: `p-1.5 md:p-2`
+- Smaller icon: `width="16" height="16"` on mobile, `md:w-5 md:h-5` on desktop
+- Repositioned higher on mobile: `top-4 md:top-20` to avoid blocking gameplay area
+- Closer to edge: `right-4 md:right-6` for easier thumb access
+
+#### 4. Mobile Detection ✅
+Added responsive behavior that detects screen size:
+```typescript
+const [isMobile, setIsMobile] = React.useState(false)
+
+React.useEffect(() => {
+  const checkMobile = () => {
+    setIsMobile(window.innerWidth < 768)
+  }
+  checkMobile()
+  window.addEventListener('resize', checkMobile)
+  return () => window.removeEventListener('resize', checkMobile)
+}, [])
+```
+
+## Mobile Touch Controls Enhancement
 
 ### Initial Assessment: ⚠️ **Needed Improvement**
 
@@ -21,9 +94,9 @@ The original implementation had touch controls working, but lacked critical mobi
 
 ### Solution Implemented: ✨ **Comprehensive Mobile Touch Feedback**
 
-## New Features Added
+### New Features Added
 
-### 1. **Visual Block Selection Highlight** 🟢
+#### 1. **Visual Block Selection Highlight** 🟢
 **File: `src/components/Game.tsx` - `handleInputStart`**
 
 When a user taps a block:
@@ -40,7 +113,7 @@ if (block.material) {
 }
 ```
 
-### 2. **Haptic Feedback** 📳
+#### 2. **Haptic Feedback** 📳
 **File: `src/components/Game.tsx` - `handleInputStart` & `handleInputEnd`**
 
 - **On Touch**: Short vibration (10ms) when block is selected
@@ -60,7 +133,7 @@ if (evt.type === 'touchend' && 'vibrate' in navigator) {
 }
 ```
 
-### 3. **Real-Time Drag Indicator** 🎯
+#### 3. **Real-Time Drag Indicator** 🎯
 **File: `src/components/Game.tsx` - `handleInputMove` & JSX**
 
 Shows a **green arrow overlay** while dragging:
@@ -81,17 +154,17 @@ if (dragStartRef.current) {
   const delta = new THREE.Vector3().copy(end).sub(start)
   const length = delta.length()
   const angle = Math.atan2(delta.z, delta.x) * (180 / Math.PI)
-  
+
   // Convert 3D to screen coordinates
   const screenStart = start.clone().project(engine.camera)
   const screenX = (screenStart.x + 1) / 2 * rect.width
   const screenY = (1 - screenStart.y) / 2 * rect.height
-  
+
   setDragIndicator({ x: screenX, y: screenY, length: length * 20, angle })
 }
 ```
 
-### 4. **Highlight Cleanup** 🧹
+#### 4. **Highlight Cleanup** 🧹
 **File: `src/components/Game.tsx` - `handleInputEnd`**
 
 When drag ends:
@@ -136,7 +209,7 @@ When drag ends:
 ```typescript
 const [dragIndicator, setDragIndicator] = useState<{
   x: number,      // Screen X position
-  y: number,      // Screen Y position  
+  y: number,      // Screen Y position
   length: number, // Arrow length (force)
   angle: number   // Arrow rotation (direction)
 } | null>(null)
@@ -181,38 +254,3 @@ const screenY = (1 - screenStart.y) / 2 * rect.height
 - Add tutorial overlay on first play
 - Implement swipe gestures for camera rotation
 - Add sound effects for audio feedback
-
-## Files Modified
-
-1. **`src/components/Game.tsx`**
-   - Added `dragIndicator` state
-   - Enhanced `handleInputStart` with visual highlight + haptic
-   - Enhanced `handleInputMove` with drag indicator calculation
-   - Enhanced `handleInputEnd` with cleanup + release haptic
-   - Added drag indicator overlay JSX
-
-## Testing Recommendations
-
-### Mobile Device Testing
-1. Open game on actual mobile device
-2. Tap a block → Should glow green + vibrate
-3. Drag finger → Should see green arrow following
-4. Check arrow points in drag direction
-5. Verify power percentage updates
-6. Release → Should vibrate stronger + block moves
-7. Confirm all visual elements clear after release
-
-### Accessibility
-- Works on devices without vibration support (graceful degradation)
-- Visual feedback works independently of haptic
-- High contrast green arrow visible in all lighting
-
-## Conclusion
-
-The mobile gameplay is now **significantly more intuitive and responsive**. Users will have no problem understanding how to move blocks, and the visual/haptic feedback makes the experience feel polished and professional.
-
-**Ease of Use Rating:**
-- **Before**: 5/10 (functional but confusing)
-- **After**: 9/10 (intuitive with clear feedback)
-
-The only remaining improvements would be camera controls and potentially larger touch targets, but the core block-moving mechanic is now very user-friendly on mobile! 🎮📱

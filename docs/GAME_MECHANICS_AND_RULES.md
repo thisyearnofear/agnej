@@ -1,4 +1,4 @@
-# Game Mechanics
+# Game Mechanics & Rules
 
 ## Game Modes
 
@@ -100,7 +100,7 @@ Displays:
 
 ---
 
-### Multiplayer Mode (Partially Implemented)
+### Multiplayer Mode
 
 ## Tower Structure
 
@@ -247,23 +247,19 @@ Block 1001-1006: Players B-F join → 6× PlayerJoined
 Block 1007: 7th player joins
            → GameStarted (state = ACTIVE)
            → TurnChanged (deadline = block 1037)
-           
+
 Frame Loop: Player A has turn until block 1037
   - Clients render at 60 FPS
   - Physics updates every frame
   - Broadcast block states to all clients
-  
+
 Block 1037: Oracle checks deadline
            → If normal: completeTurn() → TurnChanged for Player B
            → If timeout: timeoutTurn() → Player A eliminated
-           
+
 Block 2500: During Player C's turn, tower collapses
-           → reportCollapse() 
+           → reportCollapse()
            → Survivors split pot
            → GameEnded event
            → GameCreated event (game 2 starts)
 ```
-
----
-
-See [ARCHITECTURE.md](ARCHITECTURE.md) for physics details and oracle integration.

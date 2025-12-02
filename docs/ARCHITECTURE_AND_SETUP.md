@@ -1,6 +1,8 @@
-# Architecture & System Design
+# Architecture & Setup Guide
 
-## System Overview
+## System Architecture
+
+### High-Level Architecture
 
 ```
 ┌─────────────────────┐
@@ -22,9 +24,9 @@
 └─────────────────────┘
 ```
 
-## Architecture Modes
+### Architecture Modes
 
-### Solo Mode Architecture
+#### Solo Mode Architecture
 
 **Solo Practice & Solo Competitor** run entirely client-side with no server dependency.
 
@@ -50,18 +52,9 @@
 - ✅ Direct blockchain interaction (only for score submission)
 - ✅ Fixed time step: 1/120 seconds (120 FPS)
 
-**Solo Competitor Specific:**
-- Timer managed client-side
-- Collapse detection: `lockedBlock.position.y < 12`
-- Score calculation: `distance from center > 10 units`
-- On-chain submission at game end
+#### Multiplayer Mode Architecture
 
-### Multiplayer Mode Architecture
-
-
-## Frontend-Server Communication
-
-### WebSocket Events (Socket.io)
+Frontend-Server Communication via WebSocket Events (Socket.io)
 
 **Client → Server:**
 - `submitMove`: Player applies force to block
@@ -77,10 +70,6 @@
   - Data: `{ player, deadline }`
 - `gameCollapsed`: Tower collapse detected
   - Data: `{ reason, survivors }`
-
-### Fallback
-- Mock data when server unavailable (MVP)
-- Clients continue rendering with last-known state
 
 ## Physics System
 
@@ -229,7 +218,7 @@ event NewHighScore(address indexed player, string difficulty, uint256 score);
 
 **Frontend Integration:**
 ```typescript
-const { 
+const {
   submitScore,       // (difficulty, score) => void
   highScore,         // number - personal best
   rank,              // number - your ranking
@@ -260,7 +249,7 @@ const {
    └─ Clients render
 
 3. At deadline (30 sec)
-   ├─ Check collapse? 
+   ├─ Check collapse?
    │  ├─ YES → reportCollapse()
    │  │          ├─ Distribute pot
    │  │          └─ GameEnded
@@ -269,30 +258,9 @@ const {
    │           │         └─ Player eliminated
    │           └─ NO → completeTurn()
    │                   └─ Next player
-   
+
 4. TurnChanged event (repeat)
 ```
-
-## Deployment Checklist
-
-### Smart Contract
-- [ ] Deploy `HouseOfCards.sol` to Linea Sepolia
-- [ ] Update contract address in `useGameContract.ts`
-- [ ] Verify contract on block explorer
-- [ ] Set oracle owner to backend service address
-
-### Backend
-- [ ] Set `ORACLE_PRIVATE_KEY` env var
-- [ ] Deploy to hosting (Vercel, Railway, etc.)
-- [ ] Configure Linea RPC endpoint
-- [ ] Enable Socket.io CORS for frontend domain
-
-### Frontend
-- [ ] Update contract address in config
-- [ ] Update RPC endpoint (if using custom)
-- [ ] Deploy to Vercel
-- [ ] Test wallet connection
-- [ ] Test game flow end-to-end
 
 ## Performance Notes
 
@@ -303,4 +271,93 @@ const {
 
 ---
 
-See [GAME_MECHANICS.md](GAME_MECHANICS.md) for smart contract details and [SETUP.md](SETUP.md) for development instructions.
+## Setup & Development
+
+### Prerequisites
+
+- Node.js 18+
+- npm or yarn
+- Ethereum wallet (for testing on Linea Sepolia)
+
+### Installation
+
+```bash
+# Clone and install
+git clone https://github.com/thisyearnofear/agnej.git
+cd agnej
+
+# Frontend dependencies
+npm install
+
+# Backend dependencies
+cd server
+npm install
+cd ..
+```
+
+### Development
+
+#### Terminal 1: Frontend (Next.js on :3000)
+```bash
+npm run dev
+```
+
+#### Terminal 2: Backend (Express on :3001)
+```bash
+cd server
+npm run dev
+```
+
+Open [http://localhost:3000](http://localhost:3000)
+
+### Environment Variables
+
+#### Frontend (.env.local)
+```
+NEXT_PUBLIC_WALLET_CONNECT_ID=your_wallet_connect_id
+NEXT_PUBLIC_RPC_URL=https://rpc.sepolia.linea.build
+NEXT_PUBLIC_CONTRACT_ADDRESS=0x1DFd9003590E4A67594748Ecec18451e6cBDDD90
+```
+
+#### Backend (server/.env)
+```
+ORACLE_PRIVATE_KEY=your_private_key
+RPC_URL=https://rpc.sepolia.linea.build
+CONTRACT_ADDRESS=0x1DFd9003590E4A67594748Ecec18451e6cBDDD90
+PORT=3001
+```
+
+### Current Status & Gaps
+
+#### ✅ Implemented
+- Core gameplay mechanics (turn-based, 7 players)
+- Physics simulation (Cannon.js server, Physijs client)
+- Socket.io real-time sync (60 FPS)
+- Web3 wallet integration (RainbowKit)
+- Smart contract deployed (Linea Sepolia)
+- Oracle event listening
+
+#### ⚠️ Partial/TODO
+- [ ] Uncomment and test oracle `completeTurn()` calls
+- [ ] Implement timeout detection loop (currently skeleton)
+- [ ] Tune collapse detection threshold
+- [ ] Validate turn deadline logic on-chain
+- [ ] Test full game flow end-to-end
+- [ ] Implement player reload UI flow
+- [ ] Add transaction confirmation feedback
+
+### Troubleshooting
+
+#### "Cannot connect to server"
+- Ensure backend is running on port 3001
+- Check CORS settings in `server/src/index.ts`
+
+#### "Contract call failed"
+- Verify contract address in env vars
+- Check account has testnet ETH
+- Ensure connected to Linea Sepolia
+
+#### "Physics desync"
+- Restart both frontend and backend
+- Clear browser cache
+- Check network latency (should be <200ms)

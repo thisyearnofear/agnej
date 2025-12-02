@@ -29,6 +29,7 @@ export interface GameSettingsConfig {
     aiOpponentCount?: number
     difficulty: 'EASY' | 'MEDIUM' | 'HARD'
     stake: number
+    isHost?: boolean
 }
 
 export function useGameSocket(settings?: GameSettingsConfig) {
@@ -69,12 +70,25 @@ export function useGameSocket(settings?: GameSettingsConfig) {
             setIsConnected(true);
 
             if (settings) {
-                newSocket.emit('createGame', {
-                    maxPlayers: settings.gameMode === 'MULTIPLAYER' ? settings.playerCount : (settings.aiOpponentCount || 1) + 1,
-                    difficulty: settings.difficulty,
-                    stake: settings.stake,
-                    isPractice: false
-                });
+                if (settings.isHost) {
+                    newSocket.emit('createGame', {
+                        maxPlayers: settings.gameMode === 'MULTIPLAYER' ? settings.playerCount : (settings.aiOpponentCount || 1) + 1,
+                        difficulty: settings.difficulty,
+                        stake: settings.stake,
+                        isPractice: false
+                    });
+                } else {
+                    // Join existing game
+                    // We need to wait for address to be available, but usually it is by the time we click start
+                    // If address is null, the useEffect dependency on [settings] might trigger before address is ready?
+                    // But Game.tsx passes address-dependent stuff? No, Game.tsx gets address from useAccount.
+                    // We'll use the address from the hook scope.
+                    if (address) {
+                        newSocket.emit('joinGame', address);
+                    } else {
+                        console.warn('Cannot join game: Wallet not connected');
+                    }
+                }
             }
         });
 
@@ -110,7 +124,7 @@ export function useGameSocket(settings?: GameSettingsConfig) {
                 socketRef.current = null;
             }
         };
-    }, [settings]);
+    }, [settings, address]);
 
     // Timer for turn countdown
     useEffect(() => {
