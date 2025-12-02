@@ -118,6 +118,9 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
   const [showRules, setShowRules] = React.useState(
     settings.gameMode === 'SOLO_COMPETITOR' || settings.gameMode === 'SOLO_PRACTICE'
   )
+  // Drag indicator state for mobile feedback
+  const [dragIndicator, setDragIndicator] = React.useState<{ x: number, y: number, length: number, angle: number } | null>(null)
+
 
   // Multiplayer timer (from server) or solo timer
   const timeLeft = settings.gameMode === 'MULTIPLAYER' ? serverTimeLeft : (
@@ -727,6 +730,18 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
 
         engine.interaction.selectedBlock = block
 
+        // Visual feedback: Highlight selected block
+        if (block.material) {
+          block.userData.originalEmissive = block.material.emissive ? block.material.emissive.getHex() : 0x000000
+          block.material.emissive = new THREE.Color(0x00ff00)
+          block.material.emissiveIntensity = 0.3
+        }
+
+        // Haptic feedback on mobile
+        if (evt.type === 'touchstart' && 'vibrate' in navigator) {
+          navigator.vibrate(10)
+        }
+
         // Update intersection plane to match block height
         engine.interaction.plane.position.y = engine.interaction.selectedBlock.position.y
 
@@ -747,6 +762,15 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
     const handleInputEnd = function (evt: MouseEvent | TouchEvent) {
       if (engine.interaction.selectedBlock !== null) {
         // console.log('Input End. Selected block:', engine.interaction.selectedBlock.id) // Removed debug log
+
+        // Remove visual highlight
+        const block = engine.interaction.selectedBlock
+        if (block.material && block.userData.originalEmissive !== undefined) {
+          block.material.emissive = new THREE.Color(block.userData.originalEmissive)
+          block.material.emissiveIntensity = 0
+          delete block.userData.originalEmissive
+        }
+
         const start = dragStartRef.current
         let end = engine.interaction.mousePos.clone()
         if (start) {
@@ -759,10 +783,15 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
         const dir = length > 0 ? delta.normalize() : new THREE.Vector3(1, 0, 0)
         const impulse = dir.multiplyScalar(Math.max(5, Math.min(50, length * 10)))
 
+        // Haptic feedback on release (stronger for longer drags)
+        if (evt.type === 'touchend' && 'vibrate' in navigator) {
+          const vibrationStrength = Math.min(50, Math.max(10, length * 5))
+          navigator.vibrate(vibrationStrength)
+        }
+
         const blockIndex = blocksRef.current.indexOf(engine.interaction.selectedBlock)
 
         if (settings.gameMode === 'SOLO_PRACTICE' || settings.gameMode === 'SOLO_COMPETITOR') {
-          const block = engine.interaction.selectedBlock
           // console.log('Applying impulse:', impulse, 'to block mass:', block.mass) // Removed debug log
 
           // Attempt to wake up the block
@@ -784,6 +813,7 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
 
         engine.interaction.selectedBlock = null
         dragStartRef.current = null
+        setDragIndicator(null) // Clear drag indicator
       }
     }
 
@@ -811,6 +841,24 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
         const intersection = ray.intersectObject(engine.interaction.plane)
         if (intersection.length > 0) {
           engine.interaction.mousePos.copy(intersection[0].point)
+
+          // Update drag indicator for visual feedback
+          if (dragStartRef.current) {
+            const start = dragStartRef.current
+            const end = engine.interaction.mousePos.clone()
+            end.y = start.y
+            const delta = new THREE.Vector3().copy(end).sub(start)
+            delta.y = 0
+            const length = delta.length()
+            const angle = Math.atan2(delta.z, delta.x) * (180 / Math.PI)
+
+            // Convert 3D position to screen coordinates for overlay
+            const screenStart = start.clone().project(engine.camera)
+            const screenX = (screenStart.x + 1) / 2 * rect.width
+            const screenY = (1 - screenStart.y) / 2 * rect.height
+
+            setDragIndicator({ x: screenX, y: screenY, length: length * 20, angle })
+          }
         }
       }
     }
@@ -1003,10 +1051,54 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
         />
       )}
 
+
       {/* Transaction Status Indicator */}
       {(isPending || isConfirming) && (
         <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50 bg-blue-600 text-white px-4 py-2 rounded-full shadow-lg animate-pulse">
           {isPending ? 'Check Wallet...' : 'Confirming Transaction...'}
+        </div>
+      )}
+
+      {/* Drag Indicator Overlay for Mobile Feedback */}
+      {dragIndicator && (
+        <div
+          className="absolute pointer-events-none z-40"
+          style={{
+            left: `${dragIndicator.x}px`,
+            top: `${dragIndicator.y}px`,
+            transform: 'translate(-50%, -50%)'
+          }}
+        >
+          {/* Drag arrow */}
+          <div
+            className="relative"
+            style={{
+              width: `${Math.min(dragIndicator.length, 150)}px`,
+              height: '4px',
+              background: 'linear-gradient(90deg, rgba(34,197,94,0.8) 0%, rgba(34,197,94,0.3) 100%)',
+              transform: `rotate(${-dragIndicator.angle}deg)`,
+              transformOrigin: 'left center',
+              borderRadius: '2px',
+              boxShadow: '0 0 10px rgba(34,197,94,0.5)'
+            }}
+          >
+            {/* Arrowhead */}
+            <div
+              className="absolute right-0 top-1/2 -translate-y-1/2"
+              style={{
+                width: 0,
+                height: 0,
+                borderLeft: '12px solid rgba(34,197,94,0.8)',
+                borderTop: '8px solid transparent',
+                borderBottom: '8px solid transparent',
+                filter: 'drop-shadow(0 0 4px rgba(34,197,94,0.6))'
+              }}
+            />
+          </div>
+          {/* Power indicator */}
+          <div className="absolute -bottom-8 left-1/2 -translate-x-1/2 bg-black/70 text-white text-xs px-2 py-1 rounded whitespace-nowrap backdrop-blur-sm">
+            {Math.round(Math.min(dragIndicator.length / 3, 50))}% Power
+          </div>
         </div>
       )}
 
