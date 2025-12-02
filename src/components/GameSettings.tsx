@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState } from 'react'
+import LeaderboardModal from './LeaderboardModal'
 
 export interface GameSettingsConfig {
   gameMode: 'SOLO_PRACTICE' | 'SOLO_COMPETITOR' | 'SINGLE_VS_AI' | 'MULTIPLAYER'
@@ -8,6 +9,7 @@ export interface GameSettingsConfig {
   aiOpponentCount?: number
   difficulty: 'EASY' | 'MEDIUM' | 'HARD'
   stake: number
+  showHelpers: boolean
 }
 
 interface GameSettingsProps {
@@ -20,6 +22,8 @@ export default function GameSettings({ onStart }: GameSettingsProps) {
   const [aiOpponentCount, setAiOpponentCount] = useState(1)
   const [difficulty, setDifficulty] = useState<'EASY' | 'MEDIUM' | 'HARD'>('MEDIUM')
   const [stake, setStake] = useState(1)
+  const [showHelpers, setShowHelpers] = useState(false)
+  const [showLeaderboard, setShowLeaderboard] = useState(false)
 
   const handleStart = () => {
     const settings: GameSettingsConfig = {
@@ -27,7 +31,8 @@ export default function GameSettings({ onStart }: GameSettingsProps) {
       playerCount: (gameMode === 'SOLO_PRACTICE' || gameMode === 'SOLO_COMPETITOR') ? 1 : playerCount,
       aiOpponentCount: gameMode === 'SINGLE_VS_AI' ? aiOpponentCount : undefined,
       difficulty,
-      stake: (gameMode === 'SOLO_PRACTICE' || gameMode === 'SOLO_COMPETITOR') ? 0 : stake
+      stake: (gameMode === 'SOLO_PRACTICE' || gameMode === 'SOLO_COMPETITOR') ? 0 : stake,
+      showHelpers
     }
     onStart(settings)
   }
@@ -62,10 +67,22 @@ export default function GameSettings({ onStart }: GameSettingsProps) {
 
   return (
     <div className="w-full max-w-4xl mx-auto">
+      {showLeaderboard && <LeaderboardModal onClose={() => setShowLeaderboard(false)} />}
+
       <div className="bg-black/40 backdrop-blur-md border border-white/10 rounded-2xl p-6">
-        <div className="text-center mb-6">
-          <h1 className="text-3xl font-bold text-white mb-1">Game Setup</h1>
-          <p className="text-gray-400 text-sm">Choose how you want to play</p>
+        <div className="flex justify-between items-start mb-6">
+          <div className="text-center flex-1">
+            <h1 className="text-3xl font-bold text-white mb-1">Game Setup</h1>
+            <p className="text-gray-400 text-sm">Choose how you want to play</p>
+          </div>
+          <button
+            onClick={() => setShowLeaderboard(true)}
+            className="bg-white/5 hover:bg-white/10 text-white p-3 rounded-xl border border-white/10 transition-all flex items-center gap-2"
+            title="View Leaderboard"
+          >
+            <span className="text-xl">🏆</span>
+            <span className="hidden md:inline font-semibold text-sm">Leaderboard</span>
+          </button>
         </div>
 
         {/* Game Mode Selection */}
@@ -200,6 +217,19 @@ export default function GameSettings({ onStart }: GameSettingsProps) {
                 {difficulty === 'MEDIUM' && 'Balanced challenge'}
                 {difficulty === 'HARD' && 'Fast paced, unstable tower'}
               </p>
+            </div>
+
+            {/* Visual Helpers Toggle */}
+            <div>
+              <label className="flex items-center justify-between cursor-pointer group">
+                <div>
+                  <div className="text-white font-semibold text-sm">Visual Helpers</div>
+                  <div className="text-gray-500 text-xs">Show selection highlight & drag arrow</div>
+                </div>
+                <div className={`w-12 h-6 rounded-full p-1 transition-colors ${showHelpers ? 'bg-green-600' : 'bg-gray-700'}`} onClick={() => setShowHelpers(!showHelpers)}>
+                  <div className={`w-4 h-4 rounded-full bg-white transition-transform ${showHelpers ? 'translate-x-6' : 'translate-x-0'}`} />
+                </div>
+              </label>
             </div>
           </div>
 

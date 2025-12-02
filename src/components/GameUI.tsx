@@ -31,6 +31,8 @@ interface GameUIProps {
     onExit?: () => void
     showRules?: boolean
     setShowRules?: (show: boolean) => void
+    showHelpers?: boolean
+    setShowHelpers?: (show: boolean) => void
 }
 
 export default function GameUI({
@@ -53,7 +55,9 @@ export default function GameUI({
     onVote,
     onExit,
     showRules = false,
-    setShowRules
+    setShowRules,
+    showHelpers = false,
+    setShowHelpers
 }: GameUIProps) {
 
     const [scoreJuice, setScoreJuice] = React.useState(false)
@@ -278,6 +282,19 @@ export default function GameUI({
                         <line x1="12" y1="17" x2="12.01" y2="17"></line>
                     </svg>
                 </button>
+
+                {setShowHelpers && (
+                    <button
+                        onClick={() => setShowHelpers(!showHelpers)}
+                        className={`absolute top-4 md:top-20 right-14 md:right-20 bg-white/10 hover:bg-white/20 text-white p-1.5 md:p-2 rounded-full backdrop-blur-md border border-white/10 transition-all z-40 ${showHelpers ? 'text-green-400 border-green-500/50' : 'text-gray-400'}`}
+                        title="Toggle Visual Helpers"
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" className="md:w-5 md:h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                            <circle cx="12" cy="12" r="3"></circle>
+                        </svg>
+                    </button>
+                )}
 
                 {isRulesVisible && (
                     <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-md p-2 md:p-4" onClick={closeRules}>

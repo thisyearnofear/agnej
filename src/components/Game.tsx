@@ -120,6 +120,8 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
   )
   // Drag indicator state for mobile feedback
   const [dragIndicator, setDragIndicator] = React.useState<{ x: number, y: number, length: number, angle: number } | null>(null)
+  // Visual Helpers State
+  const [showHelpers, setShowHelpers] = React.useState(settings.showHelpers)
 
 
   // Multiplayer timer (from server) or solo timer
@@ -193,10 +195,15 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
   const socketRef = useRef<any>(null)
   const gameOverRef = useRef(false)
   const showRulesRef = useRef(showRules)
+  const showHelpersRef = useRef(showHelpers)
 
   useEffect(() => {
     showRulesRef.current = showRules
   }, [showRules])
+
+  useEffect(() => {
+    showHelpersRef.current = showHelpers
+  }, [showHelpers])
 
   const blocksRef = useRef<any[]>([])
   const dragStartRef = useRef<any>(null)
@@ -731,7 +738,7 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
         engine.interaction.selectedBlock = block
 
         // Visual feedback: Highlight selected block
-        if (block.material) {
+        if (showHelpersRef.current && block.material) {
           block.userData.originalEmissive = block.material.emissive ? block.material.emissive.getHex() : 0x000000
           block.material.emissive = new THREE.Color(0x00ff00)
           block.material.emissiveIntensity = 0.3
@@ -843,7 +850,7 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
           engine.interaction.mousePos.copy(intersection[0].point)
 
           // Update drag indicator for visual feedback
-          if (dragStartRef.current) {
+          if (showHelpersRef.current && dragStartRef.current) {
             const start = dragStartRef.current
             const end = engine.interaction.mousePos.clone()
             end.y = start.y
@@ -924,6 +931,8 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
         onExit={onExit}
         showRules={showRules}
         setShowRules={setShowRules}
+        showHelpers={showHelpers}
+        setShowHelpers={setShowHelpers}
       />
 
       {/* Game Over Overlay for Competitor Mode */}
