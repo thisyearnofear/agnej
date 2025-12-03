@@ -66,6 +66,11 @@ export default function Home() {
 
       <footer className="py-8 text-center text-gray-500 text-sm">
         <p>© {new Date().getFullYear()} Agnej. Built for the decentralized future.</p>
+        <div className="mt-2">
+          <Link href="/privacy-policy" className="text-gray-400 hover:text-white transition-colors">
+            Privacy Policy
+          </Link>
+        </div>
       </footer>
     </div>
   )
