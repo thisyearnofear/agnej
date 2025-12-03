@@ -2,6 +2,7 @@
 
 import React, { useEffect, useRef } from 'react'
 import { useAccount } from 'wagmi'
+import { ConnectButton } from '@rainbow-me/rainbowkit'
 import { GameSettingsConfig } from './GameSettings'
 import { loadScript, getPhysicsConfig } from './Game/physicsHelpers'
 
@@ -1003,18 +1004,27 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
 
             {/* Actions */}
             <div className="flex gap-2 flex-col">
-              <button
-                onClick={() => submitScore(settings.difficulty, score)}
-                disabled={isSubmitting || isConfirmingScore || isScoreConfirmed}
-                className={`flex-1 font-bold py-2 rounded-lg transition-all transform text-sm ${isScoreConfirmed
-                  ? 'bg-green-600 text-white cursor-default'
-                  : 'bg-gradient-to-r from-yellow-600 to-orange-600 hover:from-yellow-500 hover:to-orange-500 text-white hover:scale-105'
-                  } disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none`}
-              >
-                {isSubmitting ? '⏳ Check Wallet...' :
-                  isConfirmingScore ? '⛓️ Confirming...' :
-                    isScoreConfirmed ? '✅ Submitted!' : '💎 Submit Score'}
-              </button>
+              {address ? (
+                <button
+                  onClick={() => submitScore(settings.difficulty, score)}
+                  disabled={isSubmitting || isConfirmingScore || isScoreConfirmed}
+                  className={`flex-1 font-bold py-2 rounded-lg transition-all transform text-sm ${isScoreConfirmed
+                    ? 'bg-green-600 text-white cursor-default'
+                    : 'bg-gradient-to-r from-yellow-600 to-orange-600 hover:from-yellow-500 hover:to-orange-500 text-white hover:scale-105'
+                    } disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none`}
+                >
+                  {isSubmitting ? '⏳ Check Wallet...' :
+                    isConfirmingScore ? '⛓️ Confirming...' :
+                      isScoreConfirmed ? '✅ Submitted!' : '💎 Submit Score'}
+                </button>
+              ) : (
+                <div className="flex flex-col gap-2">
+                  <div className="bg-blue-500/20 border border-blue-500/50 rounded-lg p-3 text-center">
+                    <p className="text-blue-300 text-sm font-semibold mb-3">Connect your wallet to submit and rank your score</p>
+                    <ConnectButton />
+                  </div>
+                </div>
+              )}
 
               <div className="flex gap-2">
                 <button
