@@ -2,6 +2,8 @@
 
 import React, { useState } from 'react'
 import LeaderboardModal from './LeaderboardModal'
+import { useAccount } from 'wagmi'
+import { generateInviteLink, copyToClipboard } from '../lib/invite'
 
 export interface GameSettingsConfig {
   gameMode: 'SOLO_PRACTICE' | 'SOLO_COMPETITOR' | 'SINGLE_VS_AI' | 'MULTIPLAYER'
@@ -26,6 +28,16 @@ export default function GameSettings({ onStart }: GameSettingsProps) {
   const [showHelpers, setShowHelpers] = useState(false)
   const [showLeaderboard, setShowLeaderboard] = useState(false)
   const [isHost, setIsHost] = useState(true)
+  const [copied, setCopied] = useState(false)
+  const { address } = useAccount()
+
+  const handleCopyInvite = async () => {
+    if (!address) return
+    const inviteLink = generateInviteLink(1, address) // gameId will be dynamic in production
+    await copyToClipboard(inviteLink)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
 
   const handleStart = () => {
     const settings: GameSettingsConfig = {
@@ -178,6 +190,16 @@ export default function GameSettings({ onStart }: GameSettingsProps) {
                     Join Game
                   </button>
                 </div>
+
+                {/* Invite Friends Button */}
+                {isHost && address && (
+                  <button
+                    onClick={handleCopyInvite}
+                    className="w-full mb-4 bg-green-600/20 hover:bg-green-600/30 border border-green-500/30 text-green-300 font-semibold py-2 rounded-lg transition-all flex items-center justify-center gap-2"
+                  >
+                    <span>{copied ? '✓ Copied!' : '🔗 Copy Invite Link'}</span>
+                  </button>
+                )}
 
                 {isHost && (
                   <>

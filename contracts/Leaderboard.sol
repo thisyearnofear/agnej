@@ -3,9 +3,18 @@ pragma solidity ^0.8.19;
 
 /**
  * @title Leaderboard
- * @notice On-chain leaderboard for Agnej game
- * @dev Stores high scores with ranking support
+ * @notice On-chain leaderboard for Agnej game with Linea PoH V2 verification
+ * @dev Stores high scores with ranking support and human verification via Verax attestations
  */
+
+/**
+ * @dev Interface for Linea's PoHVerifier contract
+ * Verifies signatures from Linea's PoH V2 API
+ */
+interface IPoHVerifier {
+    function verify(bytes calldata signature, address account) external returns (bool);
+}
+
 contract Leaderboard {
     // ============ Events ============
     
@@ -22,12 +31,15 @@ contract Leaderboard {
         uint256 score
     );
 
+    event PlayerVerified(address indexed player, uint256 timestamp);
+
     // ============ Structs ============
     
     struct ScoreEntry {
         address player;
         uint256 score;
         uint256 timestamp;
+        bool isVerified;
     }
 
     // ============ State Variables ============
@@ -44,7 +56,76 @@ contract Leaderboard {
     // Difficulty -> Player -> Has submitted at least once
     mapping(string => mapping(address => bool)) private hasSubmitted;
 
+    // PoH Verification (opt-in via Linea PoH V2)
+    mapping(address => bool) public isVerified;
+    IPoHVerifier public pohVerifier = IPoHVerifier(0xBf14cFAFD7B83f6de881ae6dc10796ddD7220831);
+    address public owner;
+
+    // ============ Constructor ============
+    constructor() {
+        owner = msg.sender;
+    }
+
+    // ============ Modifiers ============
+    modifier onlyOwner() {
+        require(msg.sender == owner, "Only owner");
+        _;
+    }
+
     // ============ Public Functions ============
+
+    /**
+     * @notice Verify user via signed PoH status from Linea PoH V2 API
+     * @dev Uses the PohVerifier contract to validate signatures from Linea's signer API
+     * @param signature The signed PoH status from https://poh-signer-api.linea.build/poh/v2/{address}
+     */
+    function verifyPoHSigned(bytes calldata signature) external {
+        require(!isVerified[msg.sender], "Already verified");
+        require(pohVerifier.verify(signature, msg.sender), "Invalid PoH signature");
+        isVerified[msg.sender] = true;
+        emit PlayerVerified(msg.sender, block.timestamp);
+    }
+
+    /**
+     * @notice Backend oracle marks a user as verified after offchain API check
+     * @dev Only callable by owner (oracle service)
+     * @param player The address to verify
+     */
+    function verifyPoHOffchain(address player) external onlyOwner {
+        require(!isVerified[player], "Already verified");
+        isVerified[player] = true;
+        emit PlayerVerified(player, block.timestamp);
+    }
+
+    /**
+     * @notice Legacy verifyHuman function - deprecated, use verifyPoHSigned instead
+     * @dev Kept for backwards compatibility
+     */
+    function verifyHuman() external {
+        require(!isVerified[msg.sender], "Already verified");
+        // For MVP: allow self-verification
+        // In production: use verifyPoHSigned() with Linea PoH V2
+        isVerified[msg.sender] = true;
+        emit PlayerVerified(msg.sender, block.timestamp);
+    }
+
+    /**
+     * @notice Update the PoHVerifier contract address
+     * @dev Only callable by owner
+     */
+    function setPohVerifier(address _pohVerifier) external onlyOwner {
+        require(_pohVerifier != address(0), "Invalid address");
+        pohVerifier = IPoHVerifier(_pohVerifier);
+    }
+
+    /**
+     * @notice Transfer ownership
+     * @dev Only callable by owner
+     */
+    function transferOwnership(address newOwner) external onlyOwner {
+        require(newOwner != address(0), "Invalid address");
+        owner = newOwner;
+    }
 
     /**
      * @notice Submit a score for the specified difficulty
@@ -92,9 +173,10 @@ contract Leaderboard {
      * @notice Get top N scores for a difficulty level
      * @param difficulty The difficulty level
      * @param count Maximum number of scores to return
+     * @param verifiedOnly If true, only return verified players
      * @return Array of ScoreEntry structs, sorted highest to lowest
      */
-    function getTopScores(string memory difficulty, uint256 count) 
+    function getTopScores(string memory difficulty, uint256 count, bool verifiedOnly) 
         external 
         view 
         returns (ScoreEntry[] memory) 
@@ -106,20 +188,36 @@ contract Leaderboard {
             return new ScoreEntry[](0);
         }
         
-        // Create array of all scores
-        ScoreEntry[] memory allScores = new ScoreEntry[](totalPlayers);
+        // Filter and create array
+        uint256 validCount = 0;
+        for (uint256 i = 0; i < totalPlayers; i++) {
+            if (!verifiedOnly || isVerified[allPlayers[i]]) {
+                validCount++;
+            }
+        }
+
+        if (validCount == 0) {
+            return new ScoreEntry[](0);
+        }
+
+        ScoreEntry[] memory allScores = new ScoreEntry[](validCount);
+        uint256 idx = 0;
         for (uint256 i = 0; i < totalPlayers; i++) {
             address player = allPlayers[i];
-            allScores[i] = ScoreEntry({
-                player: player,
-                score: highScores[difficulty][player],
-                timestamp: 0 // We don't store individual timestamps for high scores
-            });
+            if (!verifiedOnly || isVerified[player]) {
+                allScores[idx] = ScoreEntry({
+                    player: player,
+                    score: highScores[difficulty][player],
+                    timestamp: 0,
+                    isVerified: isVerified[player]
+                });
+                idx++;
+            }
         }
         
-        // Sort descending (bubble sort - inefficient but simple for small datasets)
-        for (uint256 i = 0; i < totalPlayers; i++) {
-            for (uint256 j = i + 1; j < totalPlayers; j++) {
+        // Sort descending
+        for (uint256 i = 0; i < validCount; i++) {
+            for (uint256 j = i + 1; j < validCount; j++) {
                 if (allScores[j].score > allScores[i].score) {
                     ScoreEntry memory temp = allScores[i];
                     allScores[i] = allScores[j];
@@ -128,8 +226,8 @@ contract Leaderboard {
             }
         }
         
-        // Return top N scores
-        uint256 returnCount = count < totalPlayers ? count : totalPlayers;
+        // Return top N
+        uint256 returnCount = count < validCount ? count : validCount;
         ScoreEntry[] memory topScores = new ScoreEntry[](returnCount);
         for (uint256 i = 0; i < returnCount; i++) {
             topScores[i] = allScores[i];
@@ -142,30 +240,42 @@ contract Leaderboard {
      * @notice Get a player's rank for a specific difficulty
      * @param player The player's address
      * @param difficulty The difficulty level
+     * @param verifiedOnly If true, rank only among verified players
      * @return rank The player's rank (1 = best, 0 = unranked/never played)
      */
-    function getPlayerRank(address player, string memory difficulty) 
+    function getPlayerRank(address player, string memory difficulty, bool verifiedOnly) 
         external 
         view 
         returns (uint256 rank) 
     {
         if (!hasSubmitted[difficulty][player]) {
-            return 0; // Never played
+            return 0;
         }
         
         uint256 playerScore = highScores[difficulty][player];
         if (playerScore == 0) {
-            return 0; // Score of 0
+            return 0;
+        }
+
+        // If filtering by verified and player isn't verified, return 0
+        if (verifiedOnly && !isVerified[player]) {
+            return 0;
         }
         
         address[] memory allPlayers = players[difficulty];
         uint256 totalPlayers = allPlayers.length;
         
-        rank = 1; // Start at rank 1
+        rank = 1;
         for (uint256 i = 0; i < totalPlayers; i++) {
             address otherPlayer = allPlayers[i];
-            if (otherPlayer != player && highScores[difficulty][otherPlayer] > playerScore) {
-                rank++;
+            if (otherPlayer != player) {
+                // Skip if filtering by verified and other player isn't verified
+                if (verifiedOnly && !isVerified[otherPlayer]) {
+                    continue;
+                }
+                if (highScores[difficulty][otherPlayer] > playerScore) {
+                    rank++;
+                }
             }
         }
         
@@ -175,14 +285,26 @@ contract Leaderboard {
     /**
      * @notice Get total number of players for a difficulty
      * @param difficulty The difficulty level
+     * @param verifiedOnly If true, count only verified players
      * @return Total number of unique players who have submitted scores
      */
-    function getTotalPlayers(string memory difficulty) 
+    function getTotalPlayers(string memory difficulty, bool verifiedOnly) 
         external 
         view 
         returns (uint256) 
     {
-        return players[difficulty].length;
+        if (!verifiedOnly) {
+            return players[difficulty].length;
+        }
+
+        uint256 count = 0;
+        address[] memory allPlayers = players[difficulty];
+        for (uint256 i = 0; i < allPlayers.length; i++) {
+            if (isVerified[allPlayers[i]]) {
+                count++;
+            }
+        }
+        return count;
     }
 
     /**

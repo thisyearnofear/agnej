@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { useLeaderboard } from '../hooks/useLeaderboard'
 import { useAccount } from 'wagmi'
+import PoHVerification from './PoHVerification'
 
 interface LeaderboardModalProps {
     onClose: () => void
@@ -8,13 +9,13 @@ interface LeaderboardModalProps {
 
 export default function LeaderboardModal({ onClose }: LeaderboardModalProps) {
     const [difficulty, setDifficulty] = useState<'EASY' | 'MEDIUM' | 'HARD'>('MEDIUM')
-    const { topScores, highScore, rank, totalPlayers, refetchAll } = useLeaderboard(difficulty)
+    const [verifiedOnly, setVerifiedOnly] = useState(false)
+    const { topScores, highScore, rank, totalPlayers, isVerified, refetchAll } = useLeaderboard(difficulty, verifiedOnly)
     const { address } = useAccount()
 
-    // Refresh data when difficulty changes
     React.useEffect(() => {
         refetchAll()
-    }, [difficulty, refetchAll])
+    }, [difficulty, verifiedOnly, refetchAll])
 
     const formatAddress = (addr: string) => {
         if (address && addr.toLowerCase() === address.toLowerCase()) return 'You'
@@ -46,7 +47,7 @@ export default function LeaderboardModal({ onClose }: LeaderboardModalProps) {
                 </div>
 
                 {/* Difficulty Tabs */}
-                <div className="flex bg-black/40 p-1 rounded-xl mb-6">
+                <div className="flex bg-black/40 p-1 rounded-xl mb-4">
                     {(['EASY', 'MEDIUM', 'HARD'] as const).map((d) => (
                         <button
                             key={d}
@@ -60,6 +61,23 @@ export default function LeaderboardModal({ onClose }: LeaderboardModalProps) {
                             {d}
                         </button>
                     ))}
+                </div>
+
+                {/* PoH Verification Component */}
+                <PoHVerification onVerified={refetchAll} compact={false} showFullFlow={true} />
+
+                {/* Verified Filter Toggle */}
+                <div className="flex items-center justify-between bg-black/20 p-3 rounded-xl mb-4 border border-white/5">
+                    <div className="flex items-center gap-2">
+                        <span className="text-sm text-gray-300">Show Verified Only</span>
+                        <span className="text-xs text-gray-500">(PoH)</span>
+                    </div>
+                    <button
+                        onClick={() => setVerifiedOnly(!verifiedOnly)}
+                        className={`w-12 h-6 rounded-full p-1 transition-colors ${verifiedOnly ? 'bg-green-600' : 'bg-gray-700'}`}
+                    >
+                        <div className={`w-4 h-4 rounded-full bg-white transition-transform ${verifiedOnly ? 'translate-x-6' : 'translate-x-0'}`} />
+                    </button>
                 </div>
 
                 {/* Stats Summary */}
@@ -86,7 +104,7 @@ export default function LeaderboardModal({ onClose }: LeaderboardModalProps) {
                                 <th className="p-4 border-b border-white/10">Rank</th>
                                 <th className="p-4 border-b border-white/10">Player</th>
                                 <th className="p-4 border-b border-white/10 text-right">Score</th>
-                                <th className="p-4 border-b border-white/10 text-right">Date</th>
+                                <th className="p-4 border-b border-white/10 text-right">Status</th>
                             </tr>
                         </thead>
                         <tbody className="text-sm">
@@ -104,15 +122,15 @@ export default function LeaderboardModal({ onClose }: LeaderboardModalProps) {
                                         <td className="p-4 text-right font-bold text-yellow-400">
                                             {entry.score}
                                         </td>
-                                        <td className="p-4 text-right text-gray-500 text-xs">
-                                            {new Date(entry.timestamp * 1000).toLocaleDateString()}
+                                        <td className="p-4 text-right">
+                                            {entry.isVerified && <span className="text-green-400 text-xs">✓ Verified</span>}
                                         </td>
                                     </tr>
                                 ))
                             ) : (
                                 <tr>
                                     <td colSpan={4} className="p-8 text-center text-gray-500 italic">
-                                        No scores yet for this difficulty. Be the first!
+                                        {verifiedOnly ? 'No verified players yet. Be the first!' : 'No scores yet for this difficulty. Be the first!'}
                                     </td>
                                 </tr>
                             )}

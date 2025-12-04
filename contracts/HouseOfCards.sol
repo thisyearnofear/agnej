@@ -19,24 +19,30 @@ contract HouseOfCards is ReentrancyGuard, Ownable {
         address currentPlayer;
         uint256 currentTurnIndex;
         address[] players;
-        mapping(address => bool) isActive; // Is player still in the game?
+        mapping(address => bool) isActive;
         mapping(address => uint256) reloadCount;
-        uint256 collapseThreshold; // e.g., 40
+        uint256 collapseThreshold;
     }
 
     uint256 public currentGameId;
     mapping(uint256 => Game) public games;
     
+    // Referral System
+    mapping(address => address) public referredBy;
+    mapping(address => uint256) public referralCount;
+    mapping(address => uint256) public referralEarnings;
+    
     // Config
     uint256 public constant MAX_PLAYERS = 7;
-    uint256 public constant ENTRY_STAKE = 0.001 ether; // 0.001 ETH
-    uint256 public constant RELOAD_COST = 0.001 ether; // 0.001 ETH
+    uint256 public constant ENTRY_STAKE = 0.001 ether;
+    uint256 public constant RELOAD_COST = 0.001 ether;
     uint256 public constant MAX_RELOADS = 2;
     uint256 public constant TURN_DURATION = 30 seconds;
+    uint256 public constant REFERRAL_BONUS_BPS = 500; // 5% bonus to referrer
 
     // Events
     event GameCreated(uint256 indexed gameId);
-    event PlayerJoined(uint256 indexed gameId, address player);
+    event PlayerJoined(uint256 indexed gameId, address player, address referrer);
     event GameStarted(uint256 indexed gameId);
     event TurnChanged(uint256 indexed gameId, address player, uint256 deadline);
     event PlayerEliminated(uint256 indexed gameId, address player, string reason);
@@ -44,6 +50,7 @@ contract HouseOfCards is ReentrancyGuard, Ownable {
     event GameCollapsed(uint256 indexed gameId);
     event GameEnded(uint256 indexed gameId, address winner, uint256 amount);
     event PotSplit(uint256 indexed gameId, uint256 amountPerPlayer);
+    event ReferralBonus(address indexed referrer, address indexed referred, uint256 amount);
 
     constructor() Ownable(msg.sender) {
         _createGame();
@@ -51,17 +58,32 @@ contract HouseOfCards is ReentrancyGuard, Ownable {
 
     // --- Core Gameplay ---
 
-    function joinGame() external payable nonReentrant {
+    function joinGame(address referrer) external payable nonReentrant {
         Game storage game = games[currentGameId];
         require(game.state == GameState.WAITING, "Game already started");
         require(game.players.length < MAX_PLAYERS, "Game full");
         require(msg.value == ENTRY_STAKE, "Incorrect stake amount");
 
+        // Track referral (one-time, first referrer wins)
+        if (referrer != address(0) && referrer != msg.sender && referredBy[msg.sender] == address(0)) {
+            referredBy[msg.sender] = referrer;
+            referralCount[referrer]++;
+            
+            // Pay referral bonus immediately
+            uint256 bonus = (msg.value * REFERRAL_BONUS_BPS) / 10000;
+            if (bonus > 0) {
+                referralEarnings[referrer] += bonus;
+                (bool sent, ) = referrer.call{value: bonus}("");
+                require(sent, "Referral bonus failed");
+                emit ReferralBonus(referrer, msg.sender, bonus);
+            }
+        }
+
         game.players.push(msg.sender);
         game.isActive[msg.sender] = true;
         game.pot += msg.value;
 
-        emit PlayerJoined(currentGameId, msg.sender);
+        emit PlayerJoined(currentGameId, msg.sender, referrer);
 
         if (game.players.length == MAX_PLAYERS) {
             _startGame();

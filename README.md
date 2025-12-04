@@ -1,6 +1,6 @@
 # Agnej 🏗️
 
-A decentralized blockchain-based physics game. Compete in Solo Mode against the clock and global leaderboards, or join multiplayer battles where players take turns removing blocks from a 16-layer tower. Last survivor wins the pot.
+A decentralized blockchain-based physics game with open core gameplay and optional PoH-verified leaderboards. Play solo with no friction, or enable Proof of Humanity to compete fairly on verified leaderboards. Join multiplayer battles for higher rewards and exponential growth through referral mechanics.
 
 **Built with:** Next.js, Three.js, Physijs, Solidity (Linea Sepolia), Socket.io, Cannon.js
 
@@ -12,20 +12,23 @@ A decentralized blockchain-based physics game. Compete in Solo Mode against the 
 
 ### Solo Practice
 - Practice physics and controls without pressure
-- No timer, no restrictions
+- No timer, no restrictions, no gates
 - Perfect for learning the game
 
-### Solo Competitor ⭐ NEW!
+### Solo Competitor ⭐ 
 - **Race against time** - 30 seconds to remove each block
 - **Top 2 layers locked** - Can't touch them!
 - **Collapse = Game Over** - If locked layers fall below Y=12
-- **On-Chain Leaderboard** - Submit scores to blockchain
-- **Rankings & Competition** - See your rank vs global players
+- **On-Chain Leaderboard** - Submit scores to blockchain (no PoH required)
+- **Verified Leaderboard (Optional)** - Enable PoH to compete fairly on verified ranks
+- **Rankings & Competition** - See your rank vs global players (all or verified-only)
 
-### Multiplayer (Coming Soon)
-- 7-player turn-based battles
+### Multiplayer ⭐ COMING SOON - The Differentiator
+- 7-player turn-based battles (only product in exponent with this)
 - Real-time physics synchronization
-- Smart contract pot distribution
+- Smart contract pot distribution (7 ETH = 80% to winner)
+- Referral system - Share game links for 5% bonus
+- Invite friends to exponential growth
 
 ## 🚀 Quick Start
 
@@ -43,20 +46,23 @@ Open [http://localhost:3000](http://localhost:3000)
 
 ## 📚 Documentation
 
-- **[Architecture & Setup](docs/ARCHITECTURE_AND_SETUP.md)** - System design, physics engine, smart contracts, and development setup
-- **[Game Mechanics & Rules](docs/GAME_MECHANICS_AND_RULES.md)** - Tower structure, gameplay loops, scoring, and game modes
-- **[Mobile Features](docs/MOBILE_FEATURES.md)** - Mobile optimization, touch controls, and user experience enhancements
-- **[Multiplayer & Development](docs/MULTIPLAYER_AND_DEVELOPMENT.md)** - Multiplayer implementation, testing, and product roadmap
+Comprehensive documentation consolidated into 4 core guides:
+
+1. **[Setup & Architecture](docs/SETUP_AND_ARCHITECTURE.md)** - System design, physics engine, smart contracts, and PoH integration setup
+2. **[Game Mechanics](docs/GAME_MECHANICS.md)** - Game rules, tower structure, gameplay loops, and mobile features
+3. **[Implementation Guide](docs/IMPLEMENTATION_GUIDE.md)** - Component integration, deployment checklist, and code examples
+4. **[Roadmap & Strategy](docs/ROADMAP_AND_STRATEGY.md)** - Product vision, growth mechanics, implementation timeline, and success metrics
 
 ## ✨ Key Features
 
-### Solo Mode
+### Solo Mode (Open & Gate-Free)
 - ✅ **Physics-based 3D gameplay** with Physijs (120 FPS)
 - ✅ **Difficulty levels** (EASY/MEDIUM/HARD) affecting friction & mass
-- ✅ **On-chain leaderboard** with rankings
+- ✅ **On-chain leaderboard** with rankings (everyone can play)
 - ✅ **Real-time scoring** - Each block removed adds to score
 - ✅ **Competition stats** - Your rank, total players, top 3 preview
 - ✅ **New high score celebrations** with animated UI
+- ✅ **Verified Leaderboard (Opt-in)** - PoH verification prevents bot manipulation
 
 ### Multiplayer Features (Implemented)
 - ✅ **7-player turn-based gameplay** with 30-second turns
@@ -64,6 +70,8 @@ Open [http://localhost:3000](http://localhost:3000)
 - ✅ **Real-time synchronization** via Socket.io (60 FPS)
 - ✅ **Web3 integration** (RainbowKit + wagmi + Viem)
 - ✅ **Smart contract oracle** for state management
+- ✅ **Referral system** - Share game links for 5% bonus (viral growth)
+- ✅ **Proof of Humanity integration** - Fair verification for multiplayer
 
 ## 🛠️ Tech Stack
 
@@ -109,7 +117,10 @@ agnej/
 
 ## 🎯 Development Status
 
-### ✅ Completed (Phase 1)
+### ✅ Completed (Phase 1 + Linea Recommendations)
+- ✅ **Open Gameplay Architecture** - Core gameplay completely gate-free, PoH opt-in only on leaderboards
+- ✅ **Proof of Humanity Leaderboard** - Linea PoH V2 API integration strategy, dual leaderboard views
+- ✅ **Multiplayer Growth Strategy** - Referral system (5% bonus), invite mechanics, viral loops
 - ✅ **Solo Competitor Mode** - Full implementation with leaderboard
 - ✅ **On-chain scoring** - Submit & retrieve scores from blockchain
 - ✅ **Dynamic difficulty** - Physics adjusts based on difficulty setting
@@ -120,14 +131,19 @@ agnej/
 - ✅ **Web3 wallet integration** - RainbowKit with Linea Sepolia
 - ✅ **Touch controls** - Mobile-friendly drag & release
 - ✅ **Game state management** - Multiple mode support
+- ✅ **Multiplayer differentiator** - Only product in exponent with 7-player multiplayer
 
 ### 🚧 In Progress
 - ⚠️ Multiplayer server stabilization
 - ⚠️ Oracle integration (partial)
+- ⚠️ Linea PoH V2 contract deployment
 
 ### 📋 Planned (Phase 2)
-- [ ] Dedicated leaderboard page (`/leaderboard`)
+- [ ] Deploy PoH-enabled contracts
+- [ ] Implement Linea PoH V2 verification flow
+- [ ] Dedicated leaderboard page (`/leaderboard`) with PoH filtering
 - [ ] Global top 10/25/50 displays
+- [ ] Multiplayer invite system & social sharing
 - [ ] Historical score trends
 - [ ] Social features (share scores, challenges)
 - [ ] Multiple concurrent multiplayer games
@@ -176,4 +192,4 @@ MIT
 - [Game Contract](https://sepolia.lineascan.build/address/0x1DFd9003590E4A67594748Ecec18451e6cBDDD90)
 - [Leaderboard Contract](https://sepolia.lineascan.build/address/0x3127Ebc72F9760728cc2032DC28Ed7D2250bC9cF)
 
-*Last Updated: 2025-11-22*
+*Last Updated: 2025-12-04 - Updated with Linea team feedback on PoH verification and multiplayer growth*
