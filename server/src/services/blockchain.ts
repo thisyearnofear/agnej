@@ -49,25 +49,47 @@ export class BlockchainService {
         });
     }
 
-    public async completeTurn(gameId: number) {
-        try {
-            console.log(`Oracle: Completing turn for game ${gameId}`);
-            const tx = await this.contract.completeTurn(gameId);
-            await tx.wait();
-            console.log('Oracle: Turn completed on-chain');
-        } catch (error) {
-            console.error('Oracle Error (completeTurn):', error);
+    public async completeTurn(gameId: number, maxRetries: number = 3): Promise<boolean> {
+        for (let attempt = 1; attempt <= maxRetries; attempt++) {
+            try {
+                console.log(`Oracle: Completing turn for game ${gameId} (attempt ${attempt}/${maxRetries})`);
+                const tx = await this.contract.completeTurn(gameId);
+                console.log(`Oracle: Transaction sent: ${tx.hash}`);
+                await tx.wait();
+                console.log('Oracle: Turn completed on-chain');
+                return true;
+            } catch (error: any) {
+                console.error(`Oracle Error (completeTurn attempt ${attempt}):`, error.message);
+                if (attempt === maxRetries) {
+                    console.error(`Oracle: Failed to complete turn after ${maxRetries} attempts`);
+                    return false;
+                }
+                // Wait before retrying (exponential backoff)
+                await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+            }
         }
+        return false;
     }
 
-    public async reportCollapse(gameId: number) {
-        try {
-            console.log(`Oracle: Reporting collapse for game ${gameId}`);
-            const tx = await this.contract.reportCollapse(gameId);
-            await tx.wait();
-            console.log('Oracle: Collapse reported on-chain');
-        } catch (error) {
-            console.error('Oracle Error (reportCollapse):', error);
+    public async reportCollapse(gameId: number, maxRetries: number = 3): Promise<boolean> {
+        for (let attempt = 1; attempt <= maxRetries; attempt++) {
+            try {
+                console.log(`Oracle: Reporting collapse for game ${gameId} (attempt ${attempt}/${maxRetries})`);
+                const tx = await this.contract.reportCollapse(gameId);
+                console.log(`Oracle: Transaction sent: ${tx.hash}`);
+                await tx.wait();
+                console.log('Oracle: Collapse reported on-chain');
+                return true;
+            } catch (error: any) {
+                console.error(`Oracle Error (reportCollapse attempt ${attempt}):`, error.message);
+                if (attempt === maxRetries) {
+                    console.error(`Oracle: Failed to report collapse after ${maxRetries} attempts`);
+                    return false;
+                }
+                // Wait before retrying (exponential backoff)
+                await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+            }
         }
+        return false;
     }
 }
