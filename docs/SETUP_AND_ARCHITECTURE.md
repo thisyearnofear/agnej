@@ -17,7 +17,7 @@
 │  Cannon.js (physics)│
 └──────────┬──────────┘
            │ RPC calls
-           │ (completeTurn, etc)
+           │ (game start/end only)
 ┌──────────▼──────────┐
 │ Smart Contract      │
 │ (Linea Sepolia)     │
@@ -60,6 +60,12 @@
 4. Server broadcasts new block states
 5. Clients render server state
 6. Loop repeats 60 times per second
+
+**Blockchain Integration**:
+- Game start: Player stakes are recorded on-chain (joinGame)
+- Game end: Only collapse events are recorded on-chain (reportCollapse)
+- No per-turn blockchain interactions for MVP efficiency
+- Server-authoritative gameplay with minimal blockchain interaction
 
 **Key principle**: Server is authoritative, all physics truth lives on server.
 
@@ -157,6 +163,8 @@ NEXT_PUBLIC_LEADERBOARD_ADDRESS=0x3127Ebc72F9760728cc2032DC28Ed7D2250bC9cF
 
 **Backend (server/.env)**
 ```
+# ORACLE_PRIVATE_KEY optional for MVP - only needed for blockchain interactions
+# Omit for server-only mode with no blockchain calls
 ORACLE_PRIVATE_KEY=your_private_key
 RPC_URL=https://rpc.sepolia.linea.build
 CONTRACT_ADDRESS=0x1DFd9003590E4A67594748Ecec18451e6cBDDD90
@@ -208,8 +216,9 @@ Benefits:
 
 - **Physics**: 60 FPS server, 60 FPS client target
 - **Network**: Full state broadcast every frame
-- **Blockchain**: Turn changes ~every 30 seconds
+- **Blockchain**: Minimal interaction - only game start/end (~2 tx per game vs ~50+ per game previously)
 - **Scalability**: Currently single game instance (queue system planned)
+- **Gas optimization**: Removed per-turn blockchain calls, reducing gas costs by ~95%
 
 ## Tech Stack
 

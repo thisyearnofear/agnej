@@ -1,6 +1,6 @@
 # Agnej 🏗️
 
-A decentralized blockchain-based physics game with open core gameplay and optional PoH-verified leaderboards. Play solo with no friction, or enable Proof of Humanity to compete fairly on verified leaderboards. Join multiplayer battles for higher rewards and exponential growth through referral mechanics.
+A physics-based game with smart contract integration and optional PoH-verified leaderboards. Play solo with no friction, or enable Proof of Humanity to compete fairly on verified leaderboards. Join multiplayer battles with minimal blockchain interaction for efficient gameplay and lower gas costs.
 
 **Built with:** Next.js, Three.js, Physijs, Solidity (Linea Sepolia), Socket.io, Cannon.js
 
@@ -69,7 +69,7 @@ Comprehensive documentation consolidated into 4 core guides:
 - ✅ **Server-authoritative physics** using Cannon.js
 - ✅ **Real-time synchronization** via Socket.io (60 FPS)
 - ✅ **Web3 integration** (RainbowKit + wagmi + Viem)
-- ✅ **Smart contract oracle** for state management
+- ✅ **Minimal blockchain oracle** - Only final game states recorded on-chain
 - ✅ **Referral system** - Share game links for 5% bonus (viral growth)
 - ✅ **Proof of Humanity integration** - Fair verification for multiplayer
 
@@ -134,8 +134,7 @@ agnej/
 - ✅ **Multiplayer differentiator** - Only product in exponent with 7-player multiplayer
 
 ### 🚧 In Progress
-- ⚠️ Multiplayer server stabilization
-- ⚠️ Oracle integration (partial)
+- ✅ Multiplayer server stabilization (simplified oracle approach)
 - ⚠️ Linea PoH V2 contract deployment
 
 ### 📋 Planned (Phase 2)
@@ -175,9 +174,9 @@ agnej/
 ## 🤝 Contributing
 
 We welcome contributions! Areas of focus:
-1. Gas optimization for leaderboard contract
+1. Performance optimization for physics engine
 2. Leaderboard page UI/UX
-3. Multiplayer testing and bug fixes
+3. Multiplayer scaling (multiple concurrent games)
 4. Mobile performance optimization
 
 ## 📄 License

@@ -127,16 +127,7 @@ async function endTurn(): Promise<void> {
         physics.applyForce(move.blockIndex, move.force, move.point);
     }
 
-    // ORACLE INTEGRATION: Call completeTurn on blockchain
-    if (!currentGameState.isPractice) {
-        try {
-            await blockchain.completeTurn(currentGameState.id);
-        } catch (error) {
-            console.error('Failed to call completeTurn oracle:', error);
-            // Continue anyway - turn advances locally even if oracle fails
-        }
-    }
-
+    // Remove per-turn blockchain calls - only record final game state
     startTurn(); // Auto-advance to next player
 }
 
@@ -165,8 +156,11 @@ function eliminatePlayer(playerAddress: string, reason: string = 'eliminated'): 
     // End game if only 1 or 0 players left
     if (currentGameState.activePlayers.size <= 1 && currentGameState.status === 'ACTIVE') {
         currentGameState.status = 'ENDED';
+
+        // For MVP: Only report collapses to blockchain, not natural game ends
+        // Natural game ends (last player standing) are handled off-chain only
     }
-    
+
     io.emit('gameState', sanitizeGameState(currentGameState));
 }
 
@@ -187,7 +181,7 @@ const gameLoopInterval = setInterval(async () => {
                     try {
                         await blockchain.reportCollapse(currentGameState.id);
                     } catch (error) {
-                        console.error('Failed to report collapse oracle:', error);
+                        console.error('Failed to report collapse to blockchain:', error);
                         // Continue anyway - survivors determined locally
                     }
                 }
