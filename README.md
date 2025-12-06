@@ -23,9 +23,12 @@ A physics-based game with smart contract integration and optional PoH-verified l
 - **Verified Leaderboard (Optional)** - Enable PoH to compete fairly on verified ranks
 - **Rankings & Competition** - See your rank vs global players (all or verified-only)
 
-### Multiplayer ⭐ COMING SOON - The Differentiator
+### Multiplayer ⭐ LIVE
 - 7-player turn-based battles (only product in exponent with this)
-- Real-time physics synchronization
+- **Scalable Architecture** - Supports infinite concurrent game lobbies
+- **Lobby Browser** - Browse and join active games
+- **Secure Play** - Cryptographic handshake & Pay-to-Play enforcement
+- Real-time physics synchronization (Optimized for Mobile)
 - Smart contract pot distribution (7 ETH = 80% to winner)
 - Referral system - Share game links for 5% bonus
 - Invite friends to exponential growth
@@ -66,8 +69,11 @@ Comprehensive documentation consolidated into 4 core guides:
 
 ### Multiplayer Features (Implemented)
 - ✅ **7-player turn-based gameplay** with 30-second turns
-- ✅ **Server-authoritative physics** using Cannon.js
-- ✅ **Real-time synchronization** via Socket.io (60 FPS)
+- ✅ **Scalable Server** - GameManager architecture supports multiple concurrent lobbies
+- ✅ **Server-authoritative physics** using Cannon.js (60Hz sim, 20Hz broadcast)
+- ✅ **Secure Authentication** - Wallet signature handshake prevents spoofing
+- ✅ **Pay-to-Play Enforcement** - Server verifies on-chain payment before entry
+- ✅ **Real-time synchronization** via Socket.io
 - ✅ **Web3 integration** (RainbowKit + wagmi + Viem)
 - ✅ **Minimal blockchain oracle** - Only final game states recorded on-chain
 - ✅ **Referral system** - Share game links for 5% bonus (viral growth)
@@ -131,11 +137,12 @@ agnej/
 - ✅ **Web3 wallet integration** - RainbowKit with Linea Sepolia
 - ✅ **Touch controls** - Mobile-friendly drag & release
 - ✅ **Game state management** - Multiple mode support
-- ✅ **Multiplayer differentiator** - Only product in exponent with 7-player multiplayer
+- ✅ **Multiplayer Scaling** - Architecture supports multiple concurrent games & auto-cleanup
+- ✅ **Network Optimization** - Delta compression & broadcast throttling for mobile
 
 ### 🚧 In Progress
-- ✅ Multiplayer server stabilization (simplified oracle approach)
 - ⚠️ Linea PoH V2 contract deployment
+- ⚠️ Spectator mode with betting
 
 ### 📋 Planned (Phase 2)
 - [ ] Deploy PoH-enabled contracts
@@ -144,9 +151,6 @@ agnej/
 - [ ] Global top 10/25/50 displays
 - [ ] Multiplayer invite system & social sharing
 - [ ] Historical score trends
-- [ ] Social features (share scores, challenges)
-- [ ] Multiple concurrent multiplayer games
-- [ ] Spectator mode with betting
 
 ## 🐛 Recent Fixes
 
