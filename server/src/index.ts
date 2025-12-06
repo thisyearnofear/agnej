@@ -10,12 +10,15 @@ import { AuthService } from './services/auth';
 dotenv.config();
 
 const app = express();
-app.use(cors());
+
+// CORS configuration: Use environment variable for production, default to localhost for dev
+const corsOrigin = process.env.CORS_ORIGIN || 'http://localhost:3000';
+app.use(cors({ origin: corsOrigin }));
 
 const server = http.createServer(app);
 const io = new Server(server, {
     cors: {
-        origin: "*", // Allow all for dev
+        origin: corsOrigin,
         methods: ["GET", "POST"]
     }
 });
@@ -43,28 +46,24 @@ blockchain.listenToEvents({
     }
 });
 
-// Auth Middleware
+// Auth Middleware - REQUIRED for all connections
 io.use((socket, next) => {
     const { address, signature, message } = socket.handshake.auth;
 
-    // Optional: Allow unauthenticated for dev/practice? 
-    // For now, we want to enforce it if provided, or reject if game mode requires it.
-    // Simplifying: If credentials provided, verify them.
-    if (address && signature && message) {
-        if (AuthService.verifySignature(address, message, signature)) {
-            socket.data.authenticatedAddress = address;
-            console.log(`[Auth] Verified ${address}`);
-            next();
-        } else {
-            console.log(`[Auth] Failed verification for ${address}`);
-            next(new Error("Authentication failed"));
-        }
-    } else {
-        // Allow anonymous connection (for practice?), but joinGame will check.
-        // Or stricter: reject all unauthenticated connections?
-        // Let's allow connection but mark as unauthenticated.
-        console.log('[Auth] Unauthenticated connection');
+    // All connections must be authenticated
+    if (!address || !signature || !message) {
+        console.log('[Auth] Connection rejected: Missing credentials');
+        next(new Error("Authentication required: Missing address, signature, or message"));
+        return;
+    }
+
+    if (AuthService.verifySignature(address, message, signature)) {
+        socket.data.authenticatedAddress = address;
+        console.log(`[Auth] Verified ${address}`);
         next();
+    } else {
+        console.log(`[Auth] Failed verification for ${address}`);
+        next(new Error("Authentication failed: Invalid signature"));
     }
 });
 
@@ -73,12 +72,6 @@ io.on('connection', (socket) => {
 
     // Handle Game Creation
     socket.on('createGame', (config: { maxPlayers: number; difficulty: string; stake: number; isPractice: boolean }) => {
-        // Only authenticated users can create ranked games
-        if (!config.isPractice && !socket.data.authenticatedAddress) {
-            socket.emit('error', 'Authentication required for ranked games.');
-            return;
-        }
-
         const game = gameManager.createGame({
             maxPlayers: config.maxPlayers,
             difficulty: config.difficulty as 'EASY' | 'MEDIUM' | 'HARD',
@@ -86,8 +79,6 @@ io.on('connection', (socket) => {
             isPractice: config.isPractice
         });
 
-        // Return gameId so client knows which room to join if needed, 
-        // though currently we auto-match on null gameId in joinGame.
         socket.emit('gameCreated', { gameId: game.id });
     });
 
@@ -109,20 +100,11 @@ io.on('connection', (socket) => {
             gameId = data.gameId;
         }
 
-        // SECURITY: Enforce that the joining address matches the authenticated socket address
-        if (socket.data.authenticatedAddress &&
-            socket.data.authenticatedAddress.toLowerCase() !== playerAddress.toLowerCase()) {
+        // SECURITY: Enforce that joining address matches authenticated socket address
+        if (socket.data.authenticatedAddress.toLowerCase() !== playerAddress.toLowerCase()) {
             console.warn(`[Security] Spoof attempt? Socket auth: ${socket.data.authenticatedAddress}, claimed: ${playerAddress}`);
             socket.emit('error', 'Authentication mismatch.');
             return;
-        }
-
-        // If not authenticated at all, can they join? 
-        // Practice yes, Ranked no.
-        // GameManager checks payment, but we also want to stop general spoofing.
-        if (!socket.data.authenticatedAddress) {
-            // For now, allow practice joins if we implement that check later.
-            // But for safety, let's warn.
         }
 
         const game = gameManager.joinGame(socket, playerAddress, gameId);
@@ -149,5 +131,7 @@ io.on('connection', (socket) => {
 });
 
 server.listen(PORT, () => {
-    console.log(`Game Server running on port ${PORT}`);
+    console.log(`[Server] Running on port ${PORT}`);
+    console.log(`[CORS] Origin: ${corsOrigin}`);
+    console.log(`[Blockchain] Listening to contract events...`);
 });

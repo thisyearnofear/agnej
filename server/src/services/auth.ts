@@ -17,19 +17,19 @@ export class AuthService {
                 return false;
             }
 
-            // 2. Check Timestamp (Simple Replay Protection)
+            // 2. Check Timestamp (Replay Protection)
             // Expected format: "Login to Agnej: <timestamp>"
-            const parts = message.split(':');
-            if (parts.length !== 2) {
-                // If simple message without timestamp in expected format, we allow it for now if format not strict,
-                // but highly recommend strict format.
-                // For MVP, if message is just "Login", we permit it but warn.
-                if (message === 'Login') return true;
+            const expectedPrefix = 'Login to Agnej: ';
+            if (!message.startsWith(expectedPrefix)) {
+                console.warn(`[Auth] Invalid message format. Expected prefix: "${expectedPrefix}"`);
                 return false;
             }
 
-            const timestamp = parseInt(parts[1].trim());
-            if (isNaN(timestamp)) return false;
+            const timestamp = parseInt(message.substring(expectedPrefix.length));
+            if (isNaN(timestamp)) {
+                console.warn(`[Auth] Invalid timestamp in message`);
+                return false;
+            }
 
             const now = Date.now();
             // Allow 5 minute drift/window

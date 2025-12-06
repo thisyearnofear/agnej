@@ -70,6 +70,12 @@ export function useGameSocket(settings?: GameSettingsConfig) {
             return;
         }
 
+        // Required: Must have auth to connect
+        if (!authSignature || !authMessage || !address) {
+            console.log('Waiting for authentication...');
+            return;
+        }
+
         if (socketRef.current) return;
 
         console.log('Connecting to Game Server:', SERVER_URL);
@@ -77,11 +83,11 @@ export function useGameSocket(settings?: GameSettingsConfig) {
         const newSocket = io(SERVER_URL, {
             transports: ['websocket'],
             reconnectionAttempts: 5,
-            auth: authSignature && authMessage && address ? {
+            auth: {
                 address,
                 signature: authSignature,
                 message: authMessage
-            } : undefined
+            }
         });
 
         socketRef.current = newSocket;
@@ -131,8 +137,16 @@ export function useGameSocket(settings?: GameSettingsConfig) {
             setLobbies(data);
         });
 
-        newSocket.on('error', (message: string) => {
-            console.error('Socket Error:', message);
+        newSocket.on('error', (error: any) => {
+            const message = typeof error === 'string' ? error : error?.message || 'Unknown error';
+            console.error('[Socket] Error:', message);
+            // Auth errors require re-authentication
+            if (message.includes('Authentication')) {
+                localStorage.removeItem('agnej_auth_sig');
+                localStorage.removeItem('agnej_auth_msg');
+                setAuthSignature(null);
+                setAuthMessage(null);
+            }
         });
 
         // Initialize connection
@@ -148,7 +162,7 @@ export function useGameSocket(settings?: GameSettingsConfig) {
                 socketRef.current = null;
             }
         };
-    }, [settings, address, authSignature]); // Re-run if settings/address/auth change
+    }, [settings, address, authSignature, authMessage]); // Re-run if settings/address/auth changes
 
     // Handle initial setup when socket connects
     useEffect(() => {

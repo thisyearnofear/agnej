@@ -65,7 +65,7 @@ export default function GameUI({
     const [isMobile, setIsMobile] = React.useState(false)
     const [uiVisible, setUiVisible] = React.useState(true)
     const [uiPinned, setUiPinned] = React.useState(false)
-    const hideTimerRef = React.useRef<NodeJS.Timeout>()
+    const hideTimerRef = React.useRef<NodeJS.Timeout | null>(null)
 
     // Detect mobile on mount
     React.useEffect(() => {
@@ -83,7 +83,9 @@ export default function GameUI({
 
         const handleInteraction = () => {
             setUiVisible(false)
-            clearTimeout(hideTimerRef.current)
+            if (hideTimerRef.current) {
+                clearTimeout(hideTimerRef.current)
+            }
             hideTimerRef.current = setTimeout(() => setUiVisible(true), 3000)
         }
 
@@ -93,7 +95,9 @@ export default function GameUI({
         return () => {
             window.removeEventListener('touchstart', handleInteraction)
             window.removeEventListener('mousedown', handleInteraction)
-            clearTimeout(hideTimerRef.current)
+            if (hideTimerRef.current) {
+                clearTimeout(hideTimerRef.current)
+            }
         }
     }, [isMobile, uiPinned, gameState])
 
