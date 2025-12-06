@@ -4,6 +4,7 @@ import React, { useState } from 'react'
 import LeaderboardModal from './LeaderboardModal'
 import { useAccount } from 'wagmi'
 import { generateInviteLink, copyToClipboard } from '../lib/invite'
+import { useGameSocket } from '../hooks/useGameSocket'
 
 export interface GameSettingsConfig {
   gameMode: 'SOLO_PRACTICE' | 'SOLO_COMPETITOR' | 'SINGLE_VS_AI' | 'MULTIPLAYER'
@@ -11,8 +12,10 @@ export interface GameSettingsConfig {
   aiOpponentCount?: number
   difficulty: 'EASY' | 'MEDIUM' | 'HARD'
   stake: number
+
   showHelpers: boolean
   isHost?: boolean
+  joinedGameId?: number
 }
 
 interface GameSettingsProps {
@@ -29,7 +32,19 @@ export default function GameSettings({ onStart }: GameSettingsProps) {
   const [showLeaderboard, setShowLeaderboard] = useState(false)
   const [isHost, setIsHost] = useState(true)
   const [copied, setCopied] = useState(false)
+  const [selectedLobbyId, setSelectedLobbyId] = useState<number | undefined>(undefined)
   const { address } = useAccount()
+  const { lobbies, fetchLobbies } = useGameSocket() // Just for fetching lobby list
+
+  // Fetch lobbies when switching to Join mode
+  React.useEffect(() => {
+    if (gameMode === 'MULTIPLAYER' && !isHost) {
+      // Poll for lobbies
+      fetchLobbies();
+      const interval = setInterval(fetchLobbies, 5000);
+      return () => clearInterval(interval);
+    }
+  }, [gameMode, isHost, fetchLobbies]);
 
   const handleCopyInvite = async () => {
     if (!address) return
@@ -47,7 +62,8 @@ export default function GameSettings({ onStart }: GameSettingsProps) {
       difficulty,
       stake: (gameMode === 'SOLO_PRACTICE' || gameMode === 'SOLO_COMPETITOR') ? 0 : stake,
       showHelpers,
-      isHost: gameMode === 'MULTIPLAYER' ? isHost : true
+      isHost: gameMode === 'MULTIPLAYER' ? isHost : true,
+      joinedGameId: selectedLobbyId
     }
     onStart(settings)
   }
@@ -207,6 +223,7 @@ export default function GameSettings({ onStart }: GameSettingsProps) {
                       Max Players: <span className="text-blue-400">{playerCount}</span>
                     </label>
                     <div className="flex gap-2">
+                      {/* ... player count logic ... */}
                       {[2, 3, 4, 5, 6, 7].map((count) => (
                         <button
                           key={count}
@@ -221,6 +238,43 @@ export default function GameSettings({ onStart }: GameSettingsProps) {
                       ))}
                     </div>
                   </>
+                )}
+
+                {/* Lobby Browser (Join Mode) */}
+                {!isHost && (
+                  <div className="mt-4">
+                    <h4 className="text-white font-semibold mb-2 text-sm">Available Lobbies</h4>
+                    <div className="max-h-40 overflow-y-auto space-y-2 pr-1 custom-scrollbar">
+                      {lobbies.length === 0 ? (
+                        <div className="text-gray-500 text-sm text-center py-4 bg-white/5 rounded-lg border border-white/5">
+                          No active lobbies found.<br />
+                          <span className="text-xs">Click "Join Game" to auto-match or wait for one.</span>
+                        </div>
+                      ) : (
+                        lobbies.map(lobby => (
+                          <button
+                            key={lobby.id}
+                            onClick={() => setSelectedLobbyId(lobby.id)}
+                            className={`w-full flex justify-between items-center p-3 rounded-lg border transition-all ${selectedLobbyId === lobby.id
+                                ? 'bg-blue-600/20 border-blue-500 text-white'
+                                : 'bg-white/5 border-white/5 text-gray-300 hover:bg-white/10'
+                              }`}
+                          >
+                            <div className="text-left">
+                              <div className="font-bold text-sm">Game #{lobby.id.toString().slice(-4)}</div>
+                              <div className="text-xs text-gray-500">{lobby.difficulty} • {lobby.stake} USDC</div>
+                            </div>
+                            <div className="text-right text-xs">
+                              <div>{lobby.activePlayers.length}/{lobby.maxPlayers} Players</div>
+                              <div className={lobby.status === 'WAITING' ? 'text-green-400' : 'text-yellow-400'}>
+                                {lobby.status}
+                              </div>
+                            </div>
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  </div>
                 )}
               </div>
             )}

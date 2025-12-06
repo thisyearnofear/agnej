@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
 import { io, Socket } from 'socket.io-client';
-import { useAccount } from 'wagmi';
+import { useAccount, useSignMessage } from 'wagmi';
 
 const SERVER_URL = process.env.NEXT_PUBLIC_SERVER_URL || 'http://localhost:3001';
 
@@ -39,6 +39,22 @@ export function useGameSocket(settings?: GameSettingsConfig) {
     const [gameState, setGameState] = useState<GameState | null>(null);
     const [physicsState, setPhysicsState] = useState<PhysicsBlockState[] | null>(null);
     const [timeLeft, setTimeLeft] = useState(30);
+    const [lobbies, setLobbies] = useState<GameState[]>([]);
+    const { signMessageAsync } = useSignMessage();
+    const [authSignature, setAuthSignature] = useState<string | null>(null);
+    const [authMessage, setAuthMessage] = useState<string | null>(null);
+
+    // Persistence: Load Auth from LocalStorage
+    useEffect(() => {
+        const storedSig = localStorage.getItem('agnej_auth_sig');
+        const storedMsg = localStorage.getItem('agnej_auth_msg');
+        if (storedSig && storedMsg && address) {
+            // Optional: Verify address match or timestamp validity here?
+            // Server validates timestamp, so we just try to use it.
+            setAuthSignature(storedSig);
+            setAuthMessage(storedMsg);
+        }
+    }, [address]);
 
     // Ref to prevent multiple connections in React Strict Mode
     const socketRef = useRef<Socket | null>(null);
@@ -61,6 +77,11 @@ export function useGameSocket(settings?: GameSettingsConfig) {
         const newSocket = io(SERVER_URL, {
             transports: ['websocket'],
             reconnectionAttempts: 5,
+            auth: authSignature && authMessage && address ? {
+                address,
+                signature: authSignature,
+                message: authMessage
+            } : undefined
         });
 
         socketRef.current = newSocket;
@@ -69,27 +90,7 @@ export function useGameSocket(settings?: GameSettingsConfig) {
             console.log('Socket Connected:', newSocket.id);
             setIsConnected(true);
 
-            if (settings) {
-                if (settings.isHost) {
-                    newSocket.emit('createGame', {
-                        maxPlayers: settings.gameMode === 'MULTIPLAYER' ? settings.playerCount : (settings.aiOpponentCount || 1) + 1,
-                        difficulty: settings.difficulty,
-                        stake: settings.stake,
-                        isPractice: false
-                    });
-                } else {
-                    // Join existing game
-                    // We need to wait for address to be available, but usually it is by the time we click start
-                    // If address is null, the useEffect dependency on [settings] might trigger before address is ready?
-                    // But Game.tsx passes address-dependent stuff? No, Game.tsx gets address from useAccount.
-                    // We'll use the address from the hook scope.
-                    if (address) {
-                        newSocket.emit('joinGame', address);
-                    } else {
-                        console.warn('Cannot join game: Wallet not connected');
-                    }
-                }
-            }
+
         });
 
         newSocket.on('disconnect', () => {
@@ -115,7 +116,30 @@ export function useGameSocket(settings?: GameSettingsConfig) {
             setPhysicsState(state);
         });
 
+        newSocket.on('gameCreated', (data: { gameId: number }) => {
+            console.log('Game Created:', data.gameId);
+            if (settings?.isHost && address) {
+                console.log('Host joining specific game:', data.gameId);
+                newSocket.emit('joinGame', {
+                    address: address,
+                    gameId: data.gameId
+                });
+            }
+        });
+
+        newSocket.on('lobbyList', (data: GameState[]) => {
+            setLobbies(data);
+        });
+
+        newSocket.on('error', (message: string) => {
+            console.error('Socket Error:', message);
+        });
+
+        // Initialize connection
         setSocket(newSocket);
+
+        // Connection logic moved inside 'connect' listener or here if we want to be optimistic
+        // But 'connect' listener is safer for emits
 
         return () => {
             if (timerRef.current) clearInterval(timerRef.current);
@@ -124,7 +148,27 @@ export function useGameSocket(settings?: GameSettingsConfig) {
                 socketRef.current = null;
             }
         };
-    }, [settings, address]);
+    }, [settings, address, authSignature]); // Re-run if settings/address/auth change
+
+    // Handle initial setup when socket connects
+    useEffect(() => {
+        if (!socket || !isConnected || !settings) return;
+
+        if (settings.isHost) {
+            // Host creates game, then waits for 'gameCreated' to join (handled in listener above)
+            socket.emit('createGame', {
+                maxPlayers: settings.gameMode === 'MULTIPLAYER' ? settings.playerCount : (settings.aiOpponentCount || 1) + 1,
+                difficulty: settings.difficulty,
+                stake: settings.stake,
+                isPractice: false
+            });
+        } else {
+            // Join existing game (Auto-match for now)
+            if (address) {
+                socket.emit('joinGame', address);
+            }
+        }
+    }, [socket, isConnected, settings, address]);
 
     // Timer for turn countdown
     useEffect(() => {
@@ -169,6 +213,33 @@ export function useGameSocket(settings?: GameSettingsConfig) {
         timeLeft,
         submitMove,
         joinGame,
-        surrender
+        surrender,
+        authSignature,
+        lobbies,
+        fetchLobbies: () => {
+            if (socket) socket.emit('getLobbies');
+        },
+        signAndConnect: async () => {
+            if (!address) return;
+            try {
+                const message = `Login to Agnej: ${Date.now()}`;
+                const signature = await signMessageAsync({ message });
+
+                // Persistence: Save to LocalStorage
+                localStorage.setItem('agnej_auth_sig', signature);
+                localStorage.setItem('agnej_auth_msg', message);
+
+                setAuthMessage(message);
+                setAuthSignature(signature);
+                // The useEffect will catch these state changes and reconnect socket
+                // Or we can manually force reconnect if needed, but react state should handle
+                // Actually, useEffect for socket depends on [settings, address], NOT authSignature currently.
+                // We should add authSignature to dependancy or handle reconnect.
+                // Reconnecting socket interrupts gameplay, so only do this initially?
+                // Ideally, we sign BEFORE game starts (in Menu).
+            } catch (error) {
+                console.error("Signing failed", error);
+            }
+        }
     };
 }

@@ -44,7 +44,17 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
   } = useGameContract()
 
   // WebSocket Hook
-  const { socket, gameState: serverState, isConnected, physicsState, submitMove, joinGame, timeLeft: serverTimeLeft } = useGameSocket(settings)
+  const {
+    socket,
+    gameState: serverState,
+    isConnected,
+    physicsState,
+    submitMove,
+    joinGame,
+    timeLeft: serverTimeLeft,
+    authSignature,
+    signAndConnect
+  } = useGameSocket(settings)
 
   // Leaderboard Hook - Pass difficulty for correct high score fetching
   const {
@@ -59,6 +69,13 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
     hash: scoreHash,
     refetchAll: refetchLeaderboard
   } = useLeaderboard(settings.difficulty)
+
+  // Auth: Auto-trigger signing for Multiplayer
+  useEffect(() => {
+    if (settings.gameMode === 'MULTIPLAYER' && !authSignature) {
+      signAndConnect();
+    }
+  }, [settings.gameMode, authSignature, signAndConnect]);
 
 
 

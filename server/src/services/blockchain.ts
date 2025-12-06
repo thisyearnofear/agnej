@@ -24,6 +24,20 @@ export class BlockchainService {
 
         const contractAddress = process.env.CONTRACT_ADDRESS || '0x1DFd9003590E4A67594748Ecec18451e6cBDDD90';
         this.contract = new ethers.Contract(contractAddress, HOUSE_OF_CARDS_ABI, this.wallet);
+
+    }
+
+    // Cache of players who have paid for specific games
+    // gameId -> Set<playerAddress>
+    private paidPlayers: Map<number, Set<string>> = new Map();
+
+    public hasPlayerPaid(gameId: number, address: string): boolean {
+        // For MVP: If gameId is NOT in our cache, we might assume it's a new/local game?
+        // But for strict Pay-to-Play, we only return true if we saw the event.
+        // However, for PRACTICE mode games (handled by GameManager), we don't check this.
+        // This check is only for 'MULTIPLAYER' / 'RANKED' modes.
+        const players = this.paidPlayers.get(gameId);
+        return players ? players.has(address.toLowerCase()) : false;
     }
 
     public async listenToEvents(callbacks: {
@@ -35,7 +49,16 @@ export class BlockchainService {
 
         this.contract.on('PlayerJoined', (gameId, player) => {
             console.log(`Event: PlayerJoined game=${gameId} player=${player}`);
-            callbacks.onPlayerJoined(Number(gameId), player);
+
+            const gId = Number(gameId);
+            const pAddr = player.toLowerCase();
+
+            if (!this.paidPlayers.has(gId)) {
+                this.paidPlayers.set(gId, new Set());
+            }
+            this.paidPlayers.get(gId)!.add(pAddr);
+
+            callbacks.onPlayerJoined(gId, player);
         });
 
         this.contract.on('GameStarted', (gameId) => {
