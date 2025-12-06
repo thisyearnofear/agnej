@@ -32,8 +32,12 @@ export class GameInstance {
     // Physics & Networking
     public physics: PhysicsWorld;
     public pendingMoves: Map<string, MoveData> = new Map();
+
     private timeSinceLastBroadcast: number = 0;
     private readonly BROADCAST_RATE_MS = 50; // 20Hz (1000ms / 20)
+
+    // Lifecycle
+    public lastActivityTime: number = Date.now();
 
     constructor(id: number, config: GameConfig, io: Server, blockchain: BlockchainService) {
         this.id = id;
@@ -91,6 +95,7 @@ export class GameInstance {
 
             this.playerSockets.set(playerAddress, socketId);
             this.activePlayers.add(playerAddress);
+            this.lastActivityTime = Date.now();
 
             // Check auto-start
             if (this.status === 'WAITING' && this.activePlayers.size >= 2 && !this.isPractice) {
@@ -193,6 +198,7 @@ export class GameInstance {
         if (this.status !== 'ACTIVE') return;
 
         if (this.currentPlayer === playerAddress) {
+            this.lastActivityTime = Date.now();
             this.physics.applyForce(move.blockIndex, move.force, move.point);
             // We do NOT end turn here. Turn ends by time in this design?
             // "Check turn timeout (every frame but only acts when deadline passes)"

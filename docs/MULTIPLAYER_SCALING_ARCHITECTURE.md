@@ -35,10 +35,10 @@ We have successfully transitioned from a single-instance server to a **GameManag
 
 
 
-### Phase 4: Lifecycle & Persistence 🟡
+### Phase 4: Lifecycle & Persistence (Complete) ✅
 **Goal**: Handle abandoned games and server restarts.
-1. **Auto-Cleanup**: Delete empty games after 5 minutes.
-2. **Persistence**: Save game state to Redis/DB to survive server crash (optional for MVP).
+1. **Auto-Cleanup**: Games are automatically deleted if stale (15m), abandoned (1m), or finished (5m).
+2. **Persistence**: (Skipped for MVP) In-memory state is sufficient for current scale.
 
 ## 🛠️ Current Status (Phase 1)
 - ✅ Multiple Games Supported

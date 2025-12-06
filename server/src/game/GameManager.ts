@@ -134,11 +134,32 @@ export class GameManager {
                 game.update(dt);
             }
 
-            // Cleanup Logic (Simple: Remove if empty and ended)
-            if ((game.status === 'ENDED' || game.status === 'COLLAPSED') && game.activePlayers.size === 0) {
-                // Keep for a bit? For now, we rely on sockets disconnecting.
-                // If everyone left, delete it.
-                console.log(`[GameManager] Cleaning up empty game ${id}`);
+            // Cleanup Logic
+            const now = Date.now();
+            const inactiveTime = now - game.lastActivityTime;
+            let shouldDelete = false;
+
+            // 1. Finished Games: Keep for 5 minutes for results
+            if ((game.status === 'ENDED' || game.status === 'COLLAPSED') && inactiveTime > 5 * 60 * 1000) {
+                console.log(`[GameManager] Cleaning up finished game ${id} (expired)`);
+                shouldDelete = true;
+            }
+
+            // 2. Waiting Games: Keep for 15 minutes if nothing happens
+            if (game.status === 'WAITING' && inactiveTime > 15 * 60 * 1000) {
+                console.log(`[GameManager] Cleaning up stale lobby ${id}`);
+                shouldDelete = true;
+            }
+
+            // 3. Abandoned Games: If all players left, give 1 minute grace period for reconnect
+            if (game.activePlayers.size === 0 && inactiveTime > 60 * 1000) {
+                // But wait, if it's WAITING and has 0 players, is it abandoned? Yes.
+                // If it's ACTIVE and 0 players, it's definitely abandoned.
+                console.log(`[GameManager] Cleaning up abandoned game ${id}`);
+                shouldDelete = true;
+            }
+
+            if (shouldDelete) {
                 game.io.in(game.roomId).disconnectSockets(); // Force disconnect remnants
                 this.games.delete(id);
             }
