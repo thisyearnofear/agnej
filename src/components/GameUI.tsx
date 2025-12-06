@@ -61,9 +61,11 @@ export default function GameUI({
 }: GameUIProps) {
 
     const [scoreJuice, setScoreJuice] = React.useState(false)
-    // Local state fallback if not controlled
     const [localShowRules, setLocalShowRules] = React.useState(false)
     const [isMobile, setIsMobile] = React.useState(false)
+    const [uiVisible, setUiVisible] = React.useState(true)
+    const [uiPinned, setUiPinned] = React.useState(false)
+    const hideTimerRef = React.useRef<NodeJS.Timeout>()
 
     // Detect mobile on mount
     React.useEffect(() => {
@@ -74,6 +76,26 @@ export default function GameUI({
         window.addEventListener('resize', checkMobile)
         return () => window.removeEventListener('resize', checkMobile)
     }, [])
+
+    // Auto-hide UI on touch/interaction (mobile only, during active gameplay)
+    React.useEffect(() => {
+        if (!isMobile || uiPinned || gameState !== 'ACTIVE') return
+
+        const handleInteraction = () => {
+            setUiVisible(false)
+            clearTimeout(hideTimerRef.current)
+            hideTimerRef.current = setTimeout(() => setUiVisible(true), 3000)
+        }
+
+        window.addEventListener('touchstart', handleInteraction)
+        window.addEventListener('mousedown', handleInteraction)
+
+        return () => {
+            window.removeEventListener('touchstart', handleInteraction)
+            window.removeEventListener('mousedown', handleInteraction)
+            clearTimeout(hideTimerRef.current)
+        }
+    }, [isMobile, uiPinned, gameState])
 
     const isRulesVisible = setShowRules ? showRules : localShowRules
     const toggleRules = () => setShowRules ? setShowRules(!showRules) : setLocalShowRules(!localShowRules)
@@ -96,11 +118,14 @@ export default function GameUI({
 
     const stability = Math.max(0, 100 - ((fallenCount / totalBlocks) / 0.4) * 100) // 0.4 is threshold
 
+    const uiOpacity = isMobile && gameState === 'ACTIVE' && !uiVisible ? 'opacity-10' : 'opacity-100'
+    const uiTransition = 'transition-opacity duration-300'
+
     return (
         <div className="absolute inset-0 pointer-events-none flex flex-col justify-between p-4 md:p-6">
 
             {/* Top Bar: Pot & Status */}
-            <div className="flex justify-between items-start pointer-events-auto">
+            <div className={`flex justify-between items-start pointer-events-auto ${uiTransition} ${uiOpacity}`}>
                 <div className="flex gap-4">
                     {onExit && (
                         <button
@@ -112,6 +137,18 @@ export default function GameUI({
                                 <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
                                 <polyline points="16 17 21 12 16 7" />
                                 <line x1="21" x2="9" y1="12" y2="12" />
+                            </svg>
+                        </button>
+                    )}
+                    {isMobile && gameState === 'ACTIVE' && (
+                        <button
+                            onClick={() => setUiPinned(!uiPinned)}
+                            className={`bg-black/40 backdrop-blur-md border rounded-xl p-4 text-white transition-all ${uiPinned ? 'border-green-500/50 text-green-400' : 'border-white/10 text-gray-400'}`}
+                            title={uiPinned ? 'UI Pinned' : 'Pin UI'}
+                        >
+                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <line x1="12" y1="17" x2="12" y2="22"></line>
+                                <path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z"></path>
                             </svg>
                         </button>
                     )}
@@ -171,9 +208,9 @@ export default function GameUI({
                 </div>
             </div>
 
-            {/* Center: Timer (SOLO_COMPETITOR and MULTIPLAYER modes) */}
+            {/* Center: Timer (SOLO_COMPETITOR and MULTIPLAYER modes) - Always visible */}
             {gameState === 'ACTIVE' && timeLeft !== undefined && (gameMode === 'SOLO_COMPETITOR' || gameMode === 'MULTIPLAYER') && (
-                <div className="absolute top-24 left-1/2 -translate-x-1/2 pointer-events-none flex flex-col items-center gap-2">
+                <div className="absolute top-24 left-1/2 -translate-x-1/2 pointer-events-none flex flex-col items-center gap-2 transition-opacity duration-300">
                     <div className={`text-4xl font-black drop-shadow-lg transition-colors duration-300 ${timeLeft <= 10 ? 'text-red-500 animate-pulse' : 'text-white'
                         }`}>
                         {timeLeft}s
@@ -189,7 +226,7 @@ export default function GameUI({
             )}
 
             {/* Bottom: Player Queue & Controls */}
-            <div className="flex flex-col md:flex-row gap-4 items-end pointer-events-auto">
+            <div className={`flex flex-col md:flex-row gap-4 items-end pointer-events-auto ${uiTransition} ${uiOpacity}`}>
 
                 {/* Player List */}
                 <div className="bg-black/40 backdrop-blur-md border border-white/10 rounded-xl p-4 text-white w-full md:w-64 max-h-48 overflow-y-auto">
