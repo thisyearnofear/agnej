@@ -18,7 +18,7 @@ declare global {
 }
 
 import GameUI, { type GameState, Player } from './GameUI'
-import MultiplayerGameOver from './MultiplayerGameOver'
+import GameOver from './MultiplayerGameOver'
 import SpectatorOverlay from './SpectatorOverlay'
 
 import { useGameContract } from '../hooks/useGameContract'
@@ -231,6 +231,7 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
   const requestRef = useRef<number | undefined>(undefined)
   const workerCheckTimeouts = useRef<Set<NodeJS.Timeout>>(new Set())
   const sceneUpdateListenerRef = useRef<any>(null)
+  const initRetryCount = useRef<number>(0)
 
   useEffect(() => {
     socketRef.current = socket
@@ -273,7 +274,7 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
 
         // Load Physijs
         if (!window.Physijs) {
-          await loadScript('/physi.js')
+          await loadScript('/js/physi.js')
         }
 
         // Set physijs configurations
@@ -284,8 +285,8 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
           console.error('Physijs is not available')
         }
 
-        // Initialize the scene
-        initScene()
+        // Initialize the scene with a small delay to ensure DOM is ready
+        setTimeout(() => initScene(), 50)
 
         // Handle window resize
         const handleResize = () => {
@@ -304,6 +305,7 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
         window.addEventListener('resize', handleResize)
       } catch (error) {
         console.error('Error initializing game:', error)
+        return
       }
     }
 
@@ -395,7 +397,7 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
   })
 
   const initScene = function () {
-    // console.log('[INIT] Starting initScene...') // Removed debug log
+    console.log('[INIT] Starting initScene...')
     const engine = engineRef.current
     engine.interaction.mousePos = new THREE.Vector3(0, 0, 0)
     engine.interaction.offset = new THREE.Vector3(0, 0, 0)
@@ -411,11 +413,74 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
       return
     }
 
+    // Force a reflow and get dimensions with fallbacks
     const containerRect = container.getBoundingClientRect()
-    const width = containerRect.width
-    const height = containerRect.height
+    let width = containerRect.width
+    let height = containerRect.height
 
-    // console.log('[INIT] Container dimensions:', width, 'x', height) // Removed debug log
+    // Fallback: if dimensions are zero, try to calculate from parent
+    if (width === 0 || height === 0) {
+      console.warn('[INIT] Container has zero dimensions, trying fallback calculation...')
+      
+      // Try to get dimensions from offset parent
+      let currentElement: HTMLElement | null = container
+      let accumulatedHeight = 0
+      
+      while (currentElement && currentElement !== document.body) {
+        const rect = currentElement.getBoundingClientRect()
+        const computedStyle = window.getComputedStyle(currentElement)
+        
+        if (rect.height > 0) {
+          accumulatedHeight = Math.max(accumulatedHeight, rect.height)
+        }
+        
+        // Check for explicit height in computed style
+        const explicitHeight = computedStyle.height
+        if (explicitHeight && explicitHeight !== 'auto' && explicitHeight !== '0px') {
+          const heightValue = parseFloat(explicitHeight)
+          if (heightValue > 0) {
+            accumulatedHeight = Math.max(accumulatedHeight, heightValue)
+          }
+        }
+        
+        currentElement = currentElement.parentElement
+      }
+      
+      // Use viewport height as final fallback
+      if (accumulatedHeight === 0) {
+        accumulatedHeight = window.innerHeight
+      }
+      
+      // Also try to get width from parent or viewport
+      if (width === 0) {
+        width = container.parentElement ? container.parentElement.getBoundingClientRect().width : window.innerWidth
+      }
+      
+      height = accumulatedHeight
+      
+      console.log('[INIT] Fallback dimensions calculated:', width, 'x', height)
+    }
+
+    console.log('[INIT] Container dimensions:', width, 'x', height, containerRect)
+
+    // Ensure container has proper dimensions with reasonable defaults
+    if (width === 0 || height === 0) {
+      initRetryCount.current += 1
+      console.error(`[INIT] Still have zero dimensions after fallback (attempt ${initRetryCount.current}), retrying in 200ms...`)
+      
+      // Add maximum retry limit to prevent infinite loops
+      if (initRetryCount.current > 50) {
+        console.error('[INIT] Maximum retry limit reached. Using emergency fallback dimensions.')
+        width = window.innerWidth || 800
+        height = window.innerHeight || 600
+      } else {
+        setTimeout(() => initScene(), 200)
+        return
+      }
+    }
+
+    // Reset retry counter on successful initialization
+    initRetryCount.current = 0
 
     engine.renderer = new THREE.WebGLRenderer({ antialias: true })
     engine.renderer.setSize(width, height)
@@ -953,116 +1018,31 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
         setShowHelpers={setShowHelpers}
       />
 
-      {/* Game Over Overlay for Competitor Mode */}
-      {gameOver && settings.gameMode === 'SOLO_COMPETITOR' && (
-        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-          <div className="bg-gradient-to-br from-gray-900 to-gray-800 border border-white/20 p-5 rounded-2xl text-center max-w-lg w-full shadow-2xl">
-
-            {/* New High Score Celebration */}
-            {score > highScore && score > 0 && (
-              <div className="mb-3 bg-gradient-to-r from-yellow-500/20 to-orange-500/20 border-2 border-yellow-400 rounded-lg p-2 animate-pulse">
-                <div className="text-lg font-bold text-yellow-400">🔥 NEW HIGH SCORE! 🔥</div>
-                <div className="text-xs text-yellow-200">Prev: {highScore}</div>
-              </div>
-            )}
-
-            <h2 className="text-3xl font-bold text-white mb-1">Game Over</h2>
-            <p className="text-gray-400 mb-4 text-sm">Tower collapsed or time ran out</p>
-
-            {/* Score & Rank Compact */}
-            <div className="bg-white/5 rounded-lg p-4 mb-4">
-              <div className="grid grid-cols-3 gap-2">
-                <div className="text-center">
-                  <div className="text-xs text-gray-400 mb-1">Score</div>
-                  <div className="text-4xl font-bold text-yellow-400">{score}</div>
-                </div>
-                <div className="text-center border-l border-r border-white/10">
-                  <div className="text-xs text-gray-400 mb-1">Rank</div>
-                  <div className="text-2xl font-bold text-blue-400">#{rank > 0 ? rank : '—'}</div>
-                </div>
-                <div className="text-center">
-                  <div className="text-xs text-gray-400 mb-1">{settings.difficulty}</div>
-                  <div className="text-lg font-semibold text-purple-400">{totalPlayers}</div>
-                </div>
-              </div>
-            </div>
-
-            {/* Leaderboard - Top 2 only */}
-            {topScores && topScores.length > 0 && (
-              <div className="bg-white/5 rounded-lg p-3 mb-4">
-                <div className="text-xs text-gray-400 uppercase tracking-wider mb-2">Top Players</div>
-                <div className="space-y-1.5">
-                  {topScores.slice(0, 2).map((entry, idx) => (
-                    <div key={idx} className="flex items-center justify-between text-xs">
-                      <div className="flex items-center gap-2 flex-1">
-                        <span>{idx === 0 ? '🥇' : '🥈'}</span>
-                        <span className="text-gray-300 font-mono text-xs">
-                          {entry.player.slice(0, 4)}...{entry.player.slice(-3)}
-                        </span>
-                      </div>
-                      <span className="text-yellow-400 font-bold">{entry.score}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Transaction Hash Link */}
-            {isScoreConfirmed && scoreHash && (
-              <a
-                href={`https://sepolia.lineascan.build/tx/${scoreHash}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="block mb-4 text-sm text-blue-400 hover:text-blue-300 underline"
-              >
-                View Transaction on Lineascan ↗
-              </a>
-            )}
-
-            {/* Actions */}
-            <div className="flex gap-2 flex-col">
-              {address ? (
-                <button
-                  onClick={() => submitScore(settings.difficulty, score)}
-                  disabled={isSubmitting || isConfirmingScore || isScoreConfirmed}
-                  className={`flex-1 font-bold py-2 rounded-lg transition-all transform text-sm ${isScoreConfirmed
-                    ? 'bg-green-600 text-white cursor-default'
-                    : 'bg-gradient-to-r from-yellow-600 to-orange-600 hover:from-yellow-500 hover:to-orange-500 text-white hover:scale-105'
-                    } disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none`}
-                >
-                  {isSubmitting ? '⏳ Check Wallet...' :
-                    isConfirmingScore ? '⛓️ Confirming...' :
-                      isScoreConfirmed ? '✅ Submitted!' : '💎 Submit Score'}
-                </button>
-              ) : (
-                <div className="flex flex-col gap-2">
-                  <div className="bg-blue-500/20 border border-blue-500/50 rounded-lg p-3 text-center">
-                    <p className="text-blue-300 text-sm font-semibold mb-3">Connect your wallet to submit and rank your score</p>
-                    <ConnectButton />
-                  </div>
-                </div>
-              )}
-
-              <div className="flex gap-2">
-                <button
-                  onClick={resetTower}
-                  className="flex-1 bg-white/10 hover:bg-white/20 text-white font-semibold py-2 rounded-lg transition-colors text-sm"
-                >
-                  🔄 Again
-                </button>
-
-                {onExit && (
-                  <button
-                    onClick={onExit}
-                    className="flex-1 bg-white/5 hover:bg-white/10 text-gray-300 font-semibold py-2 rounded-lg transition-colors text-sm"
-                  >
-                    🚪 Menu
-                  </button>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
+      {/* Game Over Overlay - Unified for all modes */}
+      {gameOver && (
+        <GameOver
+          survivors={settings.gameMode === 'SOLO_COMPETITOR' ? 
+            [{ address: 'You', isWinner: true }] : 
+            survivors
+          }
+          status={towerCollapsed ? 'COLLAPSED' : 'ENDED'}
+          activePlayers={settings.gameMode === 'MULTIPLAYER' ? serverState?.activePlayers || [] : []}
+          userAddress={address}
+          potSize={potSize}
+          onExit={onExit}
+          mode={settings.gameMode === 'SOLO_COMPETITOR' ? 'SOLO_COMPETITOR' : 
+                settings.gameMode === 'SOLO_PRACTICE' ? 'SOLO_PRACTICE' : 'MULTIPLAYER'}
+          score={score}
+          highScore={highScore}
+          rank={rank}
+          totalPlayers={totalPlayers}
+          topScores={topScores || []}
+          onPlayAgain={settings.gameMode === 'SOLO_COMPETITOR' || settings.gameMode === 'SOLO_PRACTICE' ? resetTower : undefined}
+          isPending={isSubmitting}
+          isConfirming={isConfirmingScore}
+          isConfirmed={isScoreConfirmed}
+          onSubmitScore={address ? () => submitScore(settings.difficulty, score) : undefined}
+        />
       )}
 
       {/* Spectator Overlay (Multiplayer) */}
@@ -1075,17 +1055,7 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
         />
       )}
 
-      {/* Multiplayer Game Over (Collapse/End States) */}
-      {settings.gameMode === 'MULTIPLAYER' && gameOver && survivors.length > 0 && (
-        <MultiplayerGameOver
-          survivors={survivors}
-          status={towerCollapsed ? 'COLLAPSED' : 'ENDED'}
-          activePlayers={serverState?.activePlayers || []}
-          userAddress={address}
-          potSize={potSize}
-          onExit={onExit}
-        />
-      )}
+
 
 
       {/* Transaction Status Indicator */}
@@ -1146,7 +1116,13 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
           pointerEvents: 'auto',
           touchAction: 'none',
           WebkitUserSelect: 'none',
-          userSelect: 'none'
+          userSelect: 'none',
+          // Ensure explicit height is set
+          minHeight: '100vh',
+          height: '100%',
+          // Force height calculation
+          maxHeight: '100vh',
+          position: 'relative'
         }}
       >
         {/* Canvas will be appended here by initScene */}

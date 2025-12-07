@@ -21,7 +21,13 @@ export default function PlayPage() {
   }
 
   return (
-    <div className="h-full w-full bg-gradient-to-br from-slate-900 via-slate-800 to-black text-white flex flex-col overflow-hidden">
+    <div 
+      className="h-full w-full bg-gradient-to-br from-slate-900 via-slate-800 to-black text-white flex flex-col overflow-hidden"
+      style={{
+        height: '100svh', // Use small viewport height for mobile
+        minHeight: '100svh'
+      }}
+    >
       <header className="flex justify-between items-center p-4 md:p-6 border-b border-white/10 flex-shrink-0">
         <Link href="/" className="flex items-center space-x-2 hover:text-blue-400 transition-colors">
           <Image

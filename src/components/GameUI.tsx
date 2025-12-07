@@ -65,6 +65,7 @@ export default function GameUI({
     const [isMobile, setIsMobile] = React.useState(false)
     const [uiVisible, setUiVisible] = React.useState(true)
     const [uiPinned, setUiPinned] = React.useState(false)
+    const [uiManuallyHidden, setUiManuallyHidden] = React.useState(false)
     const hideTimerRef = React.useRef<NodeJS.Timeout | null>(null)
 
     // Detect mobile on mount
@@ -77,9 +78,16 @@ export default function GameUI({
         return () => window.removeEventListener('resize', checkMobile)
     }, [])
 
-    // Auto-hide UI on touch/interaction (mobile only, during active gameplay)
+    // Auto-hide UI on interaction (during active gameplay)
     React.useEffect(() => {
-        if (!isMobile || uiPinned || gameState !== 'ACTIVE') return
+        if (uiManuallyHidden || gameState !== 'ACTIVE') {
+            // Clear any existing hide timer if conditions aren't met
+            if (hideTimerRef.current) {
+                clearTimeout(hideTimerRef.current)
+                hideTimerRef.current = null
+            }
+            return
+        }
 
         const handleInteraction = () => {
             setUiVisible(false)
@@ -89,17 +97,23 @@ export default function GameUI({
             hideTimerRef.current = setTimeout(() => setUiVisible(true), 3000)
         }
 
-        window.addEventListener('touchstart', handleInteraction)
-        window.addEventListener('mousedown', handleInteraction)
+        // Only add auto-hide on mobile devices to avoid interfering with desktop usage
+        if (isMobile) {
+            window.addEventListener('touchstart', handleInteraction)
+            window.addEventListener('mousedown', handleInteraction)
+        }
 
         return () => {
-            window.removeEventListener('touchstart', handleInteraction)
-            window.removeEventListener('mousedown', handleInteraction)
+            if (isMobile) {
+                window.removeEventListener('touchstart', handleInteraction)
+                window.removeEventListener('mousedown', handleInteraction)
+            }
             if (hideTimerRef.current) {
                 clearTimeout(hideTimerRef.current)
+                hideTimerRef.current = null
             }
         }
-    }, [isMobile, uiPinned, gameState])
+    }, [uiManuallyHidden, gameState, isMobile])
 
     const isRulesVisible = setShowRules ? showRules : localShowRules
     const toggleRules = () => setShowRules ? setShowRules(!showRules) : setLocalShowRules(!localShowRules)
@@ -122,7 +136,7 @@ export default function GameUI({
 
     const stability = Math.max(0, 100 - ((fallenCount / totalBlocks) / 0.4) * 100) // 0.4 is threshold
 
-    const uiOpacity = isMobile && gameState === 'ACTIVE' && !uiVisible ? 'opacity-10' : 'opacity-100'
+    const uiOpacity = gameState === 'ACTIVE' && uiManuallyHidden ? 'opacity-10' : 'opacity-100'
     const uiTransition = 'transition-opacity duration-300'
 
     return (
@@ -144,20 +158,30 @@ export default function GameUI({
                             </svg>
                         </button>
                     )}
-                    {isMobile && gameState === 'ACTIVE' && (
+                    {gameState === 'ACTIVE' && (
                         <button
-                            onClick={() => setUiPinned(!uiPinned)}
-                            className={`bg-black/40 backdrop-blur-md border rounded-xl p-4 text-white transition-all ${uiPinned ? 'border-green-500/50 text-green-400' : 'border-white/10 text-gray-400'}`}
-                            title={uiPinned ? 'UI Always Visible' : 'UI Auto-Hides on Touch'}
+                            onClick={() => {
+                                // Toggle manual hide state
+                                const newHidden = !uiManuallyHidden
+                                setUiManuallyHidden(newHidden)
+                                setUiVisible(!newHidden)
+                                // Clear any existing hide timer
+                                if (hideTimerRef.current) {
+                                    clearTimeout(hideTimerRef.current)
+                                    hideTimerRef.current = null
+                                }
+                            }}
+                            className={`bg-black/40 backdrop-blur-md border rounded-xl p-4 text-white transition-all ${!uiManuallyHidden ? 'border-green-500/50 text-green-400' : 'border-white/10 text-gray-400'}`}
+                            title={!uiManuallyHidden ? 'UI Always Visible' : 'Show UI Controls'}
                         >
-                            {uiPinned ? (
-                                // Eye icon when UI is pinned (always visible)
+                            {!uiManuallyHidden ? (
+                                // Eye icon when UI is visible
                                 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                                     <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
                                     <circle cx="12" cy="12" r="3"></circle>
                                 </svg>
                             ) : (
-                                // Eye off icon when UI auto-hides
+                                // Eye off icon when UI is hidden
                                 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                                     <path d="m9.88 9.88a3 3 0 1 0 4.24 4.24"></path>
                                     <path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 11 8 11 8a13.16 13.16 0 0 1-1.67 2.68"></path>
@@ -191,15 +215,35 @@ export default function GameUI({
                 </div>
 
                 <div className="flex flex-col gap-2 items-end">
-                    <div className="bg-black/40 backdrop-blur-md border border-white/10 rounded-xl p-4 text-white text-right">
-                        <div className="text-xs text-gray-400 uppercase tracking-wider font-bold">Status</div>
-                        <div className={`text-xl font-bold ${gameState === 'ACTIVE' ? 'text-blue-400' :
+                    <div className={`bg-black/40 backdrop-blur-md border rounded-xl p-4 text-white text-right transition-all ${
+                        gameState === 'ACTIVE' ? 'border-blue-400/50' :
+                        gameState === 'VOTING' ? 'border-yellow-400/50 animate-pulse' :
+                        gameState === 'ENDED' ? 'border-red-400/50' : 'border-white/10'
+                    }`}>
+                        <div className="text-xs text-gray-400 uppercase tracking-wider font-bold mb-1">Status</div>
+                        <div className={`text-lg font-bold flex items-center justify-end gap-2 ${
+                            gameState === 'ACTIVE' ? 'text-blue-400' :
                             gameState === 'VOTING' ? 'text-yellow-400' :
-                                gameState === 'ENDED' ? 'text-red-400' : 'text-white'
-                            }`}>
-                            {gameState === 'WAITING' && 'Waiting for Players'}
-                            {gameState === 'ACTIVE' && 'Game Active'}
-                            {gameState === 'VOTING' && 'Voting Phase'}
+                            gameState === 'ENDED' ? 'text-red-400' : 'text-white'
+                        }`}>
+                            {gameState === 'WAITING' && (
+                                <>
+                                    <span className="animate-pulse">●</span>
+                                    Waiting for Players
+                                </>
+                            )}
+                            {gameState === 'ACTIVE' && (
+                                <>
+                                    <span className="animate-pulse">●</span>
+                                    Game Active
+                                </>
+                            )}
+                            {gameState === 'VOTING' && (
+                                <>
+                                    <span className="animate-bounce">⚠</span>
+                                    Vote Now!
+                                </>
+                            )}
                             {gameState === 'ENDED' && 'Game Over'}
                         </div>
                     </div>
@@ -223,9 +267,9 @@ export default function GameUI({
                 </div>
             </div>
 
-            {/* Center: Timer (SOLO_COMPETITOR and MULTIPLAYER modes) - Always visible */}
+            {/* Center: Timer (SOLO_COMPETITOR and MULTIPLAYER modes) - Affected by UI visibility */}
             {gameState === 'ACTIVE' && timeLeft !== undefined && (gameMode === 'SOLO_COMPETITOR' || gameMode === 'MULTIPLAYER') && (
-                <div className="absolute top-24 left-1/2 -translate-x-1/2 pointer-events-none flex flex-col items-center gap-2 transition-opacity duration-300">
+                <div className={`absolute top-24 left-1/2 -translate-x-1/2 pointer-events-none flex flex-col items-center gap-2 ${uiTransition} ${uiOpacity}`}>
                     <div className={`text-4xl font-black drop-shadow-lg transition-colors duration-300 ${timeLeft <= 10 ? 'text-red-500 animate-pulse' : 'text-white'
                         }`}>
                         {timeLeft}s
@@ -274,19 +318,30 @@ export default function GameUI({
                 {/* Action Buttons */}
                 <div className="flex-1 flex justify-end gap-3">
                     {gameState === 'WAITING' && (
-                        <div className="flex flex-col gap-2 items-end">
-                            <div className="text-xs text-gray-400 bg-black/40 p-2 rounded mb-2">
-                                {isPractice ? (
-                                    <>Creator Settings: <span className="text-purple-400">Practice Mode • No Stake</span></>
-                                ) : (
-                                    <>Creator Settings: <span className="text-white">{difficulty} • {stake} USDC</span></>
-                                )}
+                        <div className="flex flex-col gap-3 items-end">
+                            <div className="bg-black/40 backdrop-blur-md border border-white/10 rounded-xl p-3 text-right">
+                                <div className="text-xs text-gray-400 uppercase tracking-wider font-bold mb-1">Game Settings</div>
+                                <div className="text-sm text-gray-300 mb-2">
+                                    {isPractice ? (
+                                        <span className="text-purple-300">Practice Mode • No Stake</span>
+                                    ) : (
+                                        <>
+                                            <div>{difficulty} Difficulty</div>
+                                            <div className="text-green-400 font-semibold">{stake} USDC per player</div>
+                                        </>
+                                    )}
+                                </div>
+                                <div className="text-xs text-gray-500 flex items-center justify-end gap-1">
+                                    <span>👥</span>
+                                    <span>{players.length}/{maxPlayers} players</span>
+                                </div>
                             </div>
                             <button
                                 onClick={onJoin}
-                                className="bg-blue-600 hover:bg-blue-500 text-white px-8 py-4 rounded-xl font-bold shadow-lg shadow-blue-900/20 transition-all active:scale-95"
+                                className="bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 text-white px-8 py-4 rounded-xl font-bold shadow-lg shadow-blue-900/30 transition-all active:scale-95 hover:scale-105 flex items-center gap-2"
                             >
-                                {isPractice ? 'Join Practice' : `Join Game (${stake} USDC)`}
+                                <span>▶</span>
+                                {isPractice ? 'Start Practice' : `Join Game (${stake} USDC)`}
                             </button>
                         </div>
                     )}
@@ -294,27 +349,31 @@ export default function GameUI({
                     {gameState === 'ACTIVE' && (
                         <button
                             onClick={onReload}
-                            className="bg-purple-600 hover:bg-purple-500 text-white px-6 py-4 rounded-xl font-bold shadow-lg shadow-purple-900/20 transition-all active:scale-95"
+                            className={`bg-purple-600 hover:bg-purple-500 text-white px-6 py-4 rounded-xl font-bold shadow-lg shadow-purple-900/20 transition-all active:scale-95 pointer-events-auto ${isPractice ? '' : uiTransition + ' ' + uiOpacity}`}
                         >
                             {isPractice ? 'Reset Tower' : 'Reload Stack'}
                         </button>
                     )}
 
                     {gameState === 'VOTING' && (
-                        <div className="flex flex-col gap-2 bg-black/60 p-4 rounded-xl border border-yellow-500/30">
-                            <div className="text-center text-yellow-400 font-bold mb-2">STACK COLLAPSED! VOTE:</div>
-                            <div className="flex gap-2">
+                        <div className="flex flex-col gap-2 bg-gradient-to-br from-yellow-900/40 to-red-900/40 p-5 rounded-xl border-2 border-yellow-400/60 shadow-lg shadow-yellow-500/20 animate-fadeIn">
+                            <div className="text-center text-yellow-300 font-black mb-3 text-sm uppercase tracking-wider">
+                                🏚️ Stack Collapsed! Vote Now:
+                            </div>
+                            <div className="flex gap-3">
                                 <button
                                     onClick={() => onVote(true)}
-                                    className="bg-green-600 hover:bg-green-500 text-white px-6 py-4 rounded-xl font-bold shadow-lg transition-all active:scale-95 flex-1"
+                                    className="flex-1 bg-gradient-to-b from-green-600 to-green-700 hover:from-green-500 hover:to-green-600 text-white px-6 py-4 rounded-xl font-bold shadow-lg shadow-green-900/40 transition-all active:scale-95 hover:scale-105 flex items-center justify-center gap-2"
                                 >
-                                    Split Pot
+                                    <span>💚</span>
+                                    <span>Split Pot</span>
                                 </button>
                                 <button
                                     onClick={() => onVote(false)}
-                                    className="bg-red-600 hover:bg-red-500 text-white px-6 py-4 rounded-xl font-bold shadow-lg transition-all active:scale-95 flex-1"
+                                    className="flex-1 bg-gradient-to-b from-red-600 to-red-700 hover:from-red-500 hover:to-red-600 text-white px-6 py-4 rounded-xl font-bold shadow-lg shadow-red-900/40 transition-all active:scale-95 hover:scale-105 flex items-center justify-center gap-2"
                                 >
-                                    Continue
+                                    <span>🔥</span>
+                                    <span>Continue</span>
                                 </button>
                             </div>
                         </div>
