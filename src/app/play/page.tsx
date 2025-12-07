@@ -38,7 +38,7 @@ export default function PlayPage() {
       <main className="flex-1 relative overflow-hidden">
         {/* Show settings first, then game */}
         {!gameSettings ? (
-          <div className="h-full flex items-center justify-center p-6">
+          <div className="h-full flex items-center justify-center p-4 md:p-6 overflow-y-auto">
             <GameSettings onStart={handleStartGame} />
           </div>
         ) : (
