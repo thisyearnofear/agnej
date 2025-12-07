@@ -903,7 +903,7 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
   }
 
   return (
-    <div className="relative w-full h-full">
+    <div className="relative w-full h-full game-container">
       {/* Game UI Overlay */}
       <GameUI
         gameState={gameOver ? 'ENDED' : gameState}
@@ -1139,7 +1139,16 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
       )}
 
       {/* Game Canvas Container */}
-      <div ref={containerRef} className="w-full h-full bg-gradient-to-br from-slate-900 via-slate-800 to-black" style={{ pointerEvents: 'auto' }}>
+      <div 
+        ref={containerRef} 
+        className="w-full h-full bg-gradient-to-br from-slate-900 via-slate-800 to-black overflow-hidden" 
+        style={{ 
+          pointerEvents: 'auto',
+          touchAction: 'none',
+          WebkitUserSelect: 'none',
+          userSelect: 'none'
+        }}
+      >
         {/* Canvas will be appended here by initScene */}
       </div>
     </div>

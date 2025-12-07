@@ -21,8 +21,8 @@ export default function PlayPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-black text-white">
-      <header className="flex justify-between items-center p-6 border-b border-white/10">
+    <div className="h-full w-full bg-gradient-to-br from-slate-900 via-slate-800 to-black text-white flex flex-col overflow-hidden">
+      <header className="flex justify-between items-center p-4 md:p-6 border-b border-white/10 flex-shrink-0">
         <Link href="/" className="flex items-center space-x-2 hover:text-blue-400 transition-colors">
           <Image
             src="/images/agnej.png"
@@ -35,7 +35,7 @@ export default function PlayPage() {
         <ConnectButton />
       </header>
 
-      <main className="h-[calc(100vh-80px)] relative">
+      <main className="flex-1 relative overflow-hidden">
         {/* Show settings first, then game */}
         {!gameSettings ? (
           <div className="h-full flex items-center justify-center p-6">
