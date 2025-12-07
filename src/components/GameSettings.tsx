@@ -140,8 +140,8 @@ export default function GameSettings({ onStart }: GameSettingsProps) {
 
   // ENHANCEMENT: Step render functions using existing code
   const renderModeStep = () => (
-    <div className="space-y-6">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+    <div className="space-y-3 md:space-y-6">
+      <div className="grid grid-cols-2 md:grid-cols-2 gap-2 md:gap-4">
         {[
           { 
             key: 'SOLO_PRACTICE', 
@@ -180,20 +180,20 @@ export default function GameSettings({ onStart }: GameSettingsProps) {
             key={mode.key}
             disabled={mode.disabled}
             onClick={() => !mode.disabled && handleModeSelect(mode.key as any)}
-            className={`p-6 rounded-2xl border-2 text-left transition-all relative overflow-hidden group ${
+            className={`p-3 md:p-6 rounded-xl md:rounded-2xl border-2 text-left transition-all relative overflow-hidden group ${
               mode.disabled
                 ? 'bg-white/5 border-white/10 text-gray-600 cursor-not-allowed'
                 : 'bg-white/5 border-white/20 text-white hover:bg-white/10 hover:border-blue-500/50 hover:scale-[1.02]'
             }`}
           >
-            <div className="flex items-start gap-4">
-              <span className={`text-4xl transition-transform duration-300 ${mode.disabled ? 'grayscale' : 'group-hover:scale-110'}`}>
+            <div className="flex items-start gap-2 md:gap-4">
+              <span className={`text-2xl md:text-4xl transition-transform duration-300 ${mode.disabled ? 'grayscale' : 'group-hover:scale-110'}`}>
                 {mode.icon}
               </span>
               <div className="flex-1">
-                <h3 className="text-xl font-bold mb-1">{mode.title}</h3>
-                <p className="text-gray-400 text-sm mb-3">{mode.desc}</p>
-                <ul className="space-y-1">
+                <h3 className="text-base md:text-xl font-bold mb-1">{mode.title}</h3>
+                <p className="text-gray-400 text-xs md:text-sm mb-2 md:mb-3">{mode.desc}</p>
+                <ul className="space-y-0.5 md:space-y-1 hidden md:block">
                   {mode.features.map((feature, idx) => (
                     <li key={idx} className="text-xs text-gray-500 flex items-center gap-2">
                       <span className="w-1 h-1 bg-gray-500 rounded-full"></span>
@@ -477,12 +477,12 @@ export default function GameSettings({ onStart }: GameSettingsProps) {
     <div className="w-full max-w-4xl mx-auto">
       {showLeaderboard && <LeaderboardModal onClose={() => setShowLeaderboard(false)} />}
 
-      <div className="bg-black/40 backdrop-blur-md border border-white/10 rounded-2xl p-4 md:p-6">
+      <div className="bg-black/40 backdrop-blur-md border border-white/10 rounded-2xl p-3 md:p-6">
         {/* ENHANCEMENT: Dynamic header */}
-        <div className="flex justify-between items-start mb-6">
+        <div className="flex justify-between items-start mb-3 md:mb-6">
           <div className="flex-1">
-            <h1 className="text-2xl md:text-3xl font-bold text-white mb-1">{getStepTitle()}</h1>
-            <p className="text-gray-400 text-sm">{getStepDescription()}</p>
+            <h1 className="text-xl md:text-3xl font-bold text-white mb-1">{getStepTitle()}</h1>
+            <p className="text-gray-400 text-xs md:text-sm">{getStepDescription()}</p>
           </div>
           <button
             onClick={() => setShowLeaderboard(true)}
@@ -495,11 +495,11 @@ export default function GameSettings({ onStart }: GameSettingsProps) {
         </div>
 
         {/* ENHANCEMENT: Progress Indicator */}
-        <div className="flex items-center gap-2 mb-6">
+        <div className="flex items-center gap-2 mb-3 md:mb-6">
           {(['mode', 'config', 'summary'] as const).map((step, idx) => (
-            <div key={step} className="flex items-center gap-2">
+            <div key={step} className="flex items-center gap-1 md:gap-2">
               <div 
-                className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold transition-all ${
+                className={`w-6 h-6 md:w-8 md:h-8 rounded-full flex items-center justify-center text-xs md:text-sm font-bold transition-all ${
                   currentStep === step ? 'bg-blue-600 text-white' :
                   (['mode', 'config', 'summary'] as const).indexOf(currentStep) > idx ? 'bg-green-600 text-white' :
                   'bg-white/10 text-gray-400'
@@ -508,7 +508,7 @@ export default function GameSettings({ onStart }: GameSettingsProps) {
                 {(['mode', 'config', 'summary'] as const).indexOf(currentStep) > idx ? '✓' : idx + 1}
               </div>
               {idx < 2 && (
-                <div className={`w-8 h-1 rounded-full transition-all ${
+                <div className={`w-4 md:w-8 h-1 rounded-full transition-all ${
                   (['mode', 'config', 'summary'] as const).indexOf(currentStep) > idx ? 'bg-green-600' : 'bg-white/10'
                 }`} />
               )}
@@ -517,12 +517,12 @@ export default function GameSettings({ onStart }: GameSettingsProps) {
         </div>
 
         {/* ENHANCEMENT: Step content */}
-        <div className="mb-6">
+        <div className="mb-4 md:mb-6">
           {renderContent()}
         </div>
 
         {/* ENHANCEMENT: Navigation buttons */}
-        <div className="flex justify-between items-center border-t border-white/10 pt-6">
+        <div className="flex justify-between items-center border-t border-white/10 pt-4 md:pt-6">
           <button
             onClick={() => {
               if (currentStep === 'config') setCurrentStep('mode')
