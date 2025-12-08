@@ -22,7 +22,7 @@ interface GameSettingsProps {
   onStart: (settings: GameSettingsConfig) => void
 }
 
-type WizardStep = 'mode' | 'config' | 'summary'
+type WizardStep = 'mode' | 'config' | 'auth' | 'summary'
 
 export default function GameSettings({ onStart }: GameSettingsProps) {
   // ENHANCEMENT: Add wizard step state to existing component
@@ -39,8 +39,9 @@ export default function GameSettings({ onStart }: GameSettingsProps) {
   const [isHost, setIsHost] = useState(true)
   const [copied, setCopied] = useState(false)
   const [selectedLobbyId, setSelectedLobbyId] = useState<number | undefined>(undefined)
+  const [isSigningAuth, setIsSigningAuth] = useState(false)
   const { address } = useAccount()
-  const { lobbies, fetchLobbies } = useGameSocket() // Just for fetching lobby list
+  const { lobbies, fetchLobbies, signAndConnect, authSignature } = useGameSocket()
 
   // Fetch lobbies when switching to Join mode
   React.useEffect(() => {
@@ -75,6 +76,7 @@ export default function GameSettings({ onStart }: GameSettingsProps) {
     switch (currentStep) {
       case 'mode': return 'Choose Game Mode'
       case 'config': return 'Game Configuration'
+      case 'auth': return 'Verify Your Wallet'
       case 'summary': return 'Ready to Play'
     }
   }
@@ -83,6 +85,7 @@ export default function GameSettings({ onStart }: GameSettingsProps) {
     switch (currentStep) {
       case 'mode': return 'How would you like to play?'
       case 'config': return 'Customize your game settings'
+      case 'auth': return 'Sign a message to authenticate'
       case 'summary': return 'Review and start your game'
     }
   }
@@ -95,6 +98,7 @@ export default function GameSettings({ onStart }: GameSettingsProps) {
       }
       return true
     }
+    if (currentStep === 'auth') return authSignature !== null && !isSigningAuth
     return true
   }
 
@@ -404,6 +408,57 @@ export default function GameSettings({ onStart }: GameSettingsProps) {
     </div>
   )
 
+  const renderAuthStep = () => (
+    <div className="space-y-6">
+      <div className="bg-blue-500/10 border border-blue-500/30 rounded-xl p-6">
+        <div className="flex items-start gap-4">
+          <span className="text-4xl">🔐</span>
+          <div>
+            <h3 className="text-white font-bold mb-2">Wallet Authentication Required</h3>
+            <p className="text-gray-300 text-sm mb-4">
+              Sign a message with your wallet to verify your identity on the game server. This is a one-time authentication that will be saved locally.
+            </p>
+            <p className="text-gray-400 text-xs">
+              <strong>What happens:</strong> You'll be asked to sign a message (no gas fees). This proves you control the wallet and prevents spoofing.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-3">
+        {authSignature ? (
+          <div className="bg-green-500/10 border border-green-500/30 rounded-xl p-4 flex items-start gap-3">
+            <span className="text-2xl">✓</span>
+            <div>
+              <div className="font-bold text-green-400">Authenticated</div>
+              <div className="text-sm text-gray-300">{address?.slice(0, 6)}...{address?.slice(-4)}</div>
+            </div>
+          </div>
+        ) : (
+          <button
+            onClick={() => {
+              setIsSigningAuth(true);
+              signAndConnect().finally(() => setIsSigningAuth(false));
+            }}
+            disabled={isSigningAuth}
+            className="w-full px-6 py-4 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 disabled:from-gray-600 disabled:to-gray-700 text-white font-bold rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3"
+          >
+            {isSigningAuth ? (
+              <>
+                <div className="animate-spin w-5 h-5 border-2 border-white/30 border-t-white rounded-full" />
+                Signing...
+              </>
+            ) : (
+              <>
+                <span>🔑 Sign Message</span>
+              </>
+            )}
+          </button>
+        )}
+      </div>
+    </div>
+  )
+
   const renderSummaryStep = () => {
     const getTotalPot = () => {
       if (gameMode === 'SOLO_PRACTICE' || gameMode === 'SOLO_COMPETITOR') return 0
@@ -468,6 +523,8 @@ export default function GameSettings({ onStart }: GameSettingsProps) {
       return renderModeStep()
     } else if (currentStep === 'config') {
       return renderConfigStep()
+    } else if (currentStep === 'auth') {
+      return renderAuthStep()
     } else {
       return renderSummaryStep()
     }
@@ -496,20 +553,20 @@ export default function GameSettings({ onStart }: GameSettingsProps) {
 
         {/* ENHANCEMENT: Progress Indicator */}
         <div className="flex items-center gap-2 mb-3 md:mb-6">
-          {(['mode', 'config', 'summary'] as const).map((step, idx) => (
+          {(['mode', 'config', 'auth', 'summary'] as const).map((step, idx) => (
             <div key={step} className="flex items-center gap-1 md:gap-2">
               <div 
                 className={`w-6 h-6 md:w-8 md:h-8 rounded-full flex items-center justify-center text-xs md:text-sm font-bold transition-all ${
                   currentStep === step ? 'bg-blue-600 text-white' :
-                  (['mode', 'config', 'summary'] as const).indexOf(currentStep) > idx ? 'bg-green-600 text-white' :
+                  (['mode', 'config', 'auth', 'summary'] as const).indexOf(currentStep) > idx ? 'bg-green-600 text-white' :
                   'bg-white/10 text-gray-400'
                 }`}
               >
-                {(['mode', 'config', 'summary'] as const).indexOf(currentStep) > idx ? '✓' : idx + 1}
+                {(['mode', 'config', 'auth', 'summary'] as const).indexOf(currentStep) > idx ? '✓' : idx + 1}
               </div>
-              {idx < 2 && (
+              {idx < 3 && (
                 <div className={`w-4 md:w-8 h-1 rounded-full transition-all ${
-                  (['mode', 'config', 'summary'] as const).indexOf(currentStep) > idx ? 'bg-green-600' : 'bg-white/10'
+                  (['mode', 'config', 'auth', 'summary'] as const).indexOf(currentStep) > idx ? 'bg-green-600' : 'bg-white/10'
                 }`} />
               )}
             </div>
@@ -526,7 +583,8 @@ export default function GameSettings({ onStart }: GameSettingsProps) {
           <button
             onClick={() => {
               if (currentStep === 'config') setCurrentStep('mode')
-              else if (currentStep === 'summary') setCurrentStep(gameMode === 'SOLO_PRACTICE' ? 'mode' : 'config')
+              else if (currentStep === 'auth') setCurrentStep('config')
+              else if (currentStep === 'summary') setCurrentStep(gameMode === 'MULTIPLAYER' ? 'auth' : 'config')
             }}
             className={`px-4 py-2 rounded-lg font-semibold transition-all ${
               currentStep === 'mode' 
@@ -542,6 +600,12 @@ export default function GameSettings({ onStart }: GameSettingsProps) {
               if (currentStep === 'mode' && gameMode !== 'SOLO_PRACTICE') {
                 setCurrentStep('config')
               } else if (currentStep === 'config') {
+                if (gameMode === 'MULTIPLAYER') {
+                  setCurrentStep('auth')
+                } else {
+                  setCurrentStep('summary')
+                }
+              } else if (currentStep === 'auth') {
                 setCurrentStep('summary')
               } else {
                 handleStart()

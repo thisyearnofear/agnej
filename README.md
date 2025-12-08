@@ -40,12 +40,18 @@ A physics-based game with smart contract integration and optional PoH-verified l
 npm install
 cd server && npm install && cd ..
 
-# Development
+# Development (Terminal 1)
 npm run dev          # Frontend on :3000
+
+# Development (Terminal 2)
 cd server && npm run dev  # Backend on :3001
 ```
 
 Open [http://localhost:3000](http://localhost:3000)
+
+### Testing Multiplayer Locally
+
+See **[MULTIPLAYER_STABILIZATION.md](docs/MULTIPLAYER_STABILIZATION.md#-testing-checklist)** for detailed testing procedures and Hetzner deployment instructions.
 
 ## 📚 Documentation
 

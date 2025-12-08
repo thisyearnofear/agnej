@@ -7,24 +7,26 @@ export class BlockchainService {
     private contract: ethers.Contract;
 
     constructor() {
-        // Use Linea Sepolia RPC
+        // RPC Configuration: Linea Sepolia (testnet) by default
         const rpcUrl = process.env.RPC_URL || 'https://rpc.sepolia.linea.build';
         this.provider = new ethers.JsonRpcProvider(rpcUrl);
+        console.log(`[Blockchain] Using RPC: ${rpcUrl}`);
 
-        // Oracle Private Key (In prod, use a secure secret manager)
-        // For now, we'll use a dummy key or expect it in env
+        // Oracle Private Key (required for transaction signing)
         const privateKey = process.env.ORACLE_PRIVATE_KEY;
         if (!privateKey) {
-            console.warn('No ORACLE_PRIVATE_KEY provided. Read-only mode.');
-            // Random wallet for read-only
+            console.warn('[Blockchain] ORACLE_PRIVATE_KEY not set. Server will be read-only.');
+            // Random wallet for read-only mode
             this.wallet = ethers.Wallet.createRandom(this.provider) as unknown as ethers.Signer;
         } else {
             this.wallet = new ethers.Wallet(privateKey, this.provider);
+            console.log(`[Blockchain] Wallet initialized: ${new ethers.Wallet(privateKey).address}`);
         }
 
+        // Contract Configuration
         const contractAddress = process.env.CONTRACT_ADDRESS || '0x1DFd9003590E4A67594748Ecec18451e6cBDDD90';
         this.contract = new ethers.Contract(contractAddress, HOUSE_OF_CARDS_ABI, this.wallet);
-
+        console.log(`[Blockchain] Contract loaded: ${contractAddress}`);
     }
 
     // Cache of players who have paid for specific games
