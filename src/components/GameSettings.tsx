@@ -5,6 +5,7 @@ import LeaderboardModal from './LeaderboardModal'
 import { useAccount } from 'wagmi'
 import { generateInviteLink, copyToClipboard } from '../lib/invite'
 import { useGameSocket } from '../hooks/useGameSocket'
+import { ButtonWithFeedback, LoadingSpinner } from './ui/MicroInteractions'
 
 export interface GameSettingsConfig {
   gameMode: 'SOLO_PRACTICE' | 'SOLO_COMPETITOR' | 'SINGLE_VS_AI' | 'MULTIPLAYER'
@@ -180,14 +181,13 @@ export default function GameSettings({ onStart }: GameSettingsProps) {
             disabled: false 
           }
         ].map((mode) => (
-          <button
+          <ButtonWithFeedback
             key={mode.key}
-            disabled={mode.disabled}
             onClick={() => !mode.disabled && handleModeSelect(mode.key as any)}
-            className={`p-3 md:p-6 rounded-xl md:rounded-2xl border-2 text-left transition-all relative overflow-hidden group ${
-              mode.disabled
-                ? 'bg-white/5 border-white/10 text-gray-600 cursor-not-allowed'
-                : 'bg-white/5 border-white/20 text-white hover:bg-white/10 hover:border-blue-500/50 hover:scale-[1.02]'
+            disabled={mode.disabled}
+            type="secondary"
+            className={`w-full p-3 md:p-6 rounded-xl md:rounded-2xl border-2 text-left transition-all relative overflow-hidden group ${
+              mode.disabled ? 'cursor-not-allowed opacity-60' : 'hover:border-blue-500/50'
             }`}
           >
             <div className="flex items-start gap-2 md:gap-4">
@@ -212,7 +212,7 @@ export default function GameSettings({ onStart }: GameSettingsProps) {
                 )}
               </div>
             </div>
-          </button>
+          </ButtonWithFeedback>
         ))}
       </div>
     </div>
@@ -435,17 +435,19 @@ export default function GameSettings({ onStart }: GameSettingsProps) {
             </div>
           </div>
         ) : (
-          <button
+          <ButtonWithFeedback
             onClick={() => {
               setIsSigningAuth(true);
               signAndConnect().finally(() => setIsSigningAuth(false));
             }}
             disabled={isSigningAuth}
-            className="w-full px-6 py-4 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 disabled:from-gray-600 disabled:to-gray-700 text-white font-bold rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3"
+            type="primary"
+            size="large"
+            className="w-full flex items-center justify-center gap-3"
           >
             {isSigningAuth ? (
               <>
-                <div className="animate-spin w-5 h-5 border-2 border-white/30 border-t-white rounded-full" />
+                <LoadingSpinner size={20} />
                 Signing...
               </>
             ) : (
@@ -453,7 +455,7 @@ export default function GameSettings({ onStart }: GameSettingsProps) {
                 <span>🔑 Sign Message</span>
               </>
             )}
-          </button>
+          </ButtonWithFeedback>
         )}
       </div>
     </div>
@@ -580,12 +582,13 @@ export default function GameSettings({ onStart }: GameSettingsProps) {
 
         {/* ENHANCEMENT: Navigation buttons */}
         <div className="flex justify-between items-center border-t border-white/10 pt-4 md:pt-6">
-          <button
+          <ButtonWithFeedback
             onClick={() => {
               if (currentStep === 'config') setCurrentStep('mode')
               else if (currentStep === 'auth') setCurrentStep('config')
               else if (currentStep === 'summary') setCurrentStep(gameMode === 'MULTIPLAYER' ? 'auth' : 'config')
             }}
+            type="secondary"
             className={`px-4 py-2 rounded-lg font-semibold transition-all ${
               currentStep === 'mode' 
                 ? 'invisible' 
@@ -593,9 +596,9 @@ export default function GameSettings({ onStart }: GameSettingsProps) {
             }`}
           >
             ← Back
-          </button>
+          </ButtonWithFeedback>
 
-          <button
+          <ButtonWithFeedback
             onClick={() => {
               if (currentStep === 'mode' && gameMode !== 'SOLO_PRACTICE') {
                 setCurrentStep('config')
@@ -612,14 +615,16 @@ export default function GameSettings({ onStart }: GameSettingsProps) {
               }
             }}
             disabled={!canProceed()}
-            className="px-6 py-3 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 disabled:from-gray-600 disabled:to-gray-700 text-white font-bold rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            type="primary"
+            size="large"
+            className="flex items-center gap-2"
           >
             {currentStep === 'summary' ? 'Start Game' : 'Continue'}
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M5 12h14" />
               <path d="m12 5 7 7-7 7" />
             </svg>
-          </button>
+          </ButtonWithFeedback>
         </div>
       </div>
     </div>

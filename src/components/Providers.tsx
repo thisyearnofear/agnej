@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { RainbowKitProvider, getDefaultConfig } from '@rainbow-me/rainbowkit'
 import { WagmiProvider } from 'wagmi'
 import { sepolia, mainnet, lineaSepolia } from 'wagmi/chains'
+import LayoutWrapper from './transitions/LayoutWrapper'
 
 const queryClient = new QueryClient()
 
@@ -20,7 +21,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
     <WagmiProvider config={config}>
       <QueryClientProvider client={queryClient}>
         <RainbowKitProvider>
-          {children}
+          <LayoutWrapper>
+            {children}
+          </LayoutWrapper>
         </RainbowKitProvider>
       </QueryClientProvider>
     </WagmiProvider>
