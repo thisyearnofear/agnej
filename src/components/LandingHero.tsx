@@ -6,6 +6,7 @@ import { ConnectButton } from '@rainbow-me/rainbowkit'
 import Link from 'next/link'
 import Image from 'next/image'
 import InteractiveTower from './InteractiveTower'
+import ImmersiveBackground from './ui/ImmersiveBackground'
 
 export default function LandingHero() {
   const [isMobile, setIsMobile] = useState(false)
@@ -18,24 +19,8 @@ export default function LandingHero() {
   }, [])
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-black text-white overflow-hidden">
-      {/* Animated background particles */}
-      <div className="fixed inset-0 -z-10">
-        {Array.from({ length: 20 }).map((_, i) => (
-          <div
-            key={i}
-            className="absolute rounded-full bg-blue-500/20 animate-pulse"
-            style={{
-              width: Math.random() * 100 + 50 + 'px',
-              height: Math.random() * 100 + 50 + 'px',
-              left: Math.random() * 100 + '%',
-              top: Math.random() * 100 + '%',
-              animationDelay: Math.random() * 2 + 's',
-              animationDuration: Math.random() * 3 + 2 + 's'
-            }}
-          />
-        ))}
-      </div>
+    <ImmersiveBackground>
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-black text-white overflow-hidden">
 
       <header className="flex justify-between items-center p-6 border-b border-white/10 relative z-10 animate-fadeIn">
         <Link href="/" className="flex items-center space-x-2">
@@ -267,5 +252,6 @@ export default function LandingHero() {
         </div>
       </footer>
     </div>
+    </ImmersiveBackground>
   )
 }

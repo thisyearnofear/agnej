@@ -21,21 +21,27 @@ export default function PageTransition({
     switch (transitionType) {
       case 'slide':
         return {
-          initial: { opacity: 0, x: 20 },
+          initial: { opacity: 0, x: '100%' },
           animate: { opacity: 1, x: 0 },
-          exit: { opacity: 0, x: -20 }
+          exit: { opacity: 0, x: '-100%' }
         }
       case 'scale':
         return {
-          initial: { opacity: 0, scale: 0.95 },
+          initial: { opacity: 0, scale: 0.8 },
           animate: { opacity: 1, scale: 1 },
-          exit: { opacity: 0, scale: 0.95 }
+          exit: { opacity: 0, scale: 1.2 }
         }
       case 'flip':
         return {
-          initial: { opacity: 0, rotateY: 15 },
+          initial: { opacity: 0, rotateY: 180 },
           animate: { opacity: 1, rotateY: 0 },
-          exit: { opacity: 0, rotateY: -15 }
+          exit: { opacity: 0, rotateY: -180 }
+        }
+      case 'scan':
+        return {
+          initial: { opacity: 0, y: '100%', scale: 0.9 },
+          animate: { opacity: 1, y: 0, scale: 1 },
+          exit: { opacity: 0, y: '-100%', scale: 1.1 }
         }
       default: // fade
         return {

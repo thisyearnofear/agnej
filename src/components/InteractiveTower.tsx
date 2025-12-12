@@ -8,6 +8,11 @@ export default function InteractiveTower() {
   const [isInteracting, setIsInteracting] = useState(false)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const animationRef = useRef<number | null>(null)
+  const blocksRef = useRef<Array<{
+    x: number, y: number, width: number, height: number, 
+    color: string, depth: number, angle: number, 
+    vx: number, vy: number, rotation: number
+  }>>([])
 
   useEffect(() => {
     const checkMobile = () => setIsMobile(window.innerWidth < 768)
@@ -16,7 +21,7 @@ export default function InteractiveTower() {
     return () => window.removeEventListener('resize', checkMobile)
   })
 
-  // Enhanced 2D/3D hybrid tower animation
+  // Enhanced 3D tower with physics simulation preview
   useEffect(() => {
     if (!canvasRef.current) return
     
@@ -27,8 +32,25 @@ export default function InteractiveTower() {
     let animationFrameId: number
     let blocks: Array<{
       x: number, y: number, width: number, height: number, 
-      color: string, depth: number, angle: number
+      color: string, depth: number, angle: number, 
+      vx: number, vy: number, rotation: number
     }> = []
+    
+    // Automatic physics demonstration
+    const physicsInterval = setInterval(() => {
+      if (blocks.length > 0 && !isInteracting) {
+        // Randomly select a block to animate
+        const randomBlockIndex = Math.floor(Math.random() * blocks.length)
+        const block = blocks[randomBlockIndex]
+        
+        // Apply gentle physics impulse
+        block.vx = (Math.random() - 0.5) * 2
+        block.vy = -2
+        
+        // Reset after animation
+        setTimeout(() => initBlocks(), 1500)
+      }
+    }, 8000)
     
     // Initialize blocks with 3D perspective
     const initBlocks = () => {
@@ -51,7 +73,10 @@ export default function InteractiveTower() {
             height: blockHeight * perspectiveScale,
             depth: blockDepth * perspectiveScale,
             color: i < layers - 2 ? '#4F46E5' : '#EF4444',
-            angle: 0
+            angle: 0,
+            vx: 0,
+            vy: 0,
+            rotation: 0
           })
         }
       }
@@ -67,12 +92,40 @@ export default function InteractiveTower() {
       ctx.fillStyle = gradient
       ctx.fillRect(0, 0, canvas.width, canvas.height)
       
+      // Apply physics simulation
+      if (isInteracting) {
+        blocks.forEach(block => {
+          // Add gravity effect
+          block.vy += 0.1
+          block.x += block.vx
+          block.y += block.vy
+          block.rotation += block.vx * 0.01
+          
+          // Bounce off edges
+          if (block.x < 0 || block.x + block.width > canvas.width) {
+            block.vx *= -0.8
+          }
+          if (block.y + block.height > canvas.height) {
+            block.vy *= -0.6
+            block.y = canvas.height - block.height
+          }
+        })
+      }
+      
       // Sort blocks by y position for proper depth rendering
       const sortedBlocks = [...blocks].sort((a, b) => a.y - b.y)
       
+      // Add automatic wobble animation to all blocks
+      const time = Date.now() * 0.001
+      
       sortedBlocks.forEach((block, index) => {
-        // Add physics-based wobble when interacting
-        const wobbleAmount = isInteracting ? Math.sin(Date.now() * 0.005 + index * 0.3) * 3 : Math.sin(Date.now() * 0.002 + index * 0.5) * 0.5
+        // Add automatic wobble animation (always active)
+        const autoWobble = Math.sin(time * 0.003 + index * 0.5) * 1.5
+        
+        // Add additional wobble when interacting
+        const interactionWobble = isInteracting ? Math.sin(time * 0.005 + index * 0.3) * 3 : 0
+        
+        const wobbleAmount = autoWobble + interactionWobble
         const currentColor = hoveredBlock === index ? '#8B5CF6' : block.color
         
         // Draw main block
@@ -80,10 +133,10 @@ export default function InteractiveTower() {
         ctx.strokeStyle = hoveredBlock === index ? '#A78BFA' : '#374151'
         ctx.lineWidth = hoveredBlock === index ? 3 : 2
         
-        // Apply 3D perspective transform
+        // Apply 3D perspective transform with physics rotation
         ctx.save()
         ctx.translate(block.x + wobbleAmount + block.width / 2, block.y + block.height / 2)
-        ctx.rotate(block.angle * Math.PI / 180)
+        ctx.rotate((block.angle + block.rotation) * Math.PI / 180)
         
         // Draw block with rounded corners
         ctx.beginPath()
@@ -144,6 +197,7 @@ export default function InteractiveTower() {
     
     return () => {
       cancelAnimationFrame(animationFrameId)
+      clearInterval(physicsInterval)
     }
   }, [hoveredBlock, isInteracting])
 
@@ -159,8 +213,18 @@ export default function InteractiveTower() {
     setHoveredBlock(blockIndex)
     setIsInteracting(true)
     
+    // Add physics impulse to clicked block
+    if (blocks[blockIndex]) {
+      blocks[blockIndex].vx = (Math.random() - 0.5) * 5
+      blocks[blockIndex].vy = -5
+    }
+    
     // Reset interaction after animation
-    setTimeout(() => setIsInteracting(false), 1000)
+    setTimeout(() => {
+      setIsInteracting(false)
+      // Reset tower after physics simulation
+      initBlocks()
+    }, 2000)
   }
 
   return (
