@@ -20,7 +20,7 @@ export class GameManager {
         return game;
     }
 
-    public joinGame(socket: Socket, playerAddress: string, gameId?: number): GameInstance | null {
+    public joinGame(socket: Socket, playerAddress: string, gameId?: number, asSpectator: boolean = false): GameInstance | null {
         let game: GameInstance | undefined;
 
         if (gameId) {
@@ -31,18 +31,23 @@ export class GameManager {
                 socket.emit('error', 'Game not found.');
                 return null;
             }
-        } else {
-            // Auto-matchmaking: Find first WAITING game with space
+        } else if (!asSpectator) {
+            // Auto-matchmaking: Find first WAITING game with space (players only)
             game = this.findAvailableGame();
             if (!game) {
                 console.log(`[GameManager] No available games for ${playerAddress}. Player should create one.`);
                 socket.emit('error', 'No available games. Please create one.');
                 return null;
             }
+        } else {
+            // Spectators cannot use auto-matchmaking (must specify gameId)
+            console.warn(`[GameManager] Spectators must specify gameId`);
+            socket.emit('error', 'Please specify a game ID to spectate.');
+            return null;
         }
 
-        // Payment verification for ranked games
-        if (!game.isPractice && game.difficulty !== 'EASY') {
+        // Payment verification for ranked games (not required for spectators)
+        if (!asSpectator && !game.isPractice && game.difficulty !== 'EASY') {
             const hasPaid = this.blockchain.hasPlayerPaid(game.id, playerAddress);
             if (!hasPaid) {
                 console.warn(`[GameManager] Access Denied: Player ${playerAddress} has not paid for game ${game.id}`);
@@ -54,18 +59,20 @@ export class GameManager {
         // Join Socket.io room
         socket.join(game.roomId);
 
-        // Add to game logic
-        const success = game.addPlayer(playerAddress, socket.id);
+        // Add to game logic (as player or spectator)
+        const success = game.addPlayer(playerAddress, socket.id, asSpectator);
         if (!success) {
             socket.leave(game.roomId);
-            socket.emit('error', 'Could not join game. Game full or not accepting players.');
+            const reason = asSpectator ? 'Could not join as spectator.' : 'Could not join game. Game full or not accepting players.';
+            socket.emit('error', reason);
             return null;
         }
 
         // Map socket for quick lookup
         this.socketGameMap.set(socket.id, game.id);
 
-        console.log(`[GameManager] Player ${playerAddress} joined game ${game.id}`);
+        const joinType = asSpectator ? 'spectator' : 'player';
+        console.log(`[GameManager] ${joinType} ${playerAddress} joined game ${game.id}`);
         return game;
     }
 
@@ -89,11 +96,16 @@ export class GameManager {
         if (gameId) {
             const game = this.games.get(gameId);
             if (game) {
-                // Find address by socketId
-                for (const [addr, sId] of game.playerSockets.entries()) {
-                    if (sId === socketId) {
-                        game.removePlayer(addr, 'disconnected');
-                        break;
+                // Check if it's a spectator
+                if (game.isSpectator(socketId)) {
+                    game.removeSpectator(socketId);
+                } else {
+                    // Find address by socketId and remove as player
+                    for (const [addr, sId] of game.playerSockets.entries()) {
+                        if (sId === socketId) {
+                            game.removePlayer(addr, 'disconnected');
+                            break;
+                        }
                     }
                 }
             }

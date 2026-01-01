@@ -5,9 +5,13 @@ import { BlockchainService } from '../services/blockchain';
 import { GameConfig, GameState, MoveData } from './types';
 import { TurnManager } from './TurnManager';
 import { MoveValidator, ValidationResult } from './MoveValidator';
+import { SpectatorManager } from './SpectatorManager';
+import { ReconnectionManager } from './ReconnectionManager';
+import { GameHistory } from './GameHistory';
 import { GameError, GameErrorCode, createGameError } from './errors';
 
 const TURN_DURATION_MS = 30000;
+const RECONNECTION_GRACE_PERIOD_MS = 30000; // 30 seconds for players to reconnect
 
 export class GameInstance extends EventEmitter {
     public id: number;
@@ -28,6 +32,15 @@ export class GameInstance extends EventEmitter {
 
     // Turn Management (delegated to TurnManager)
     private turnManager: TurnManager | null = null;
+
+    // Spectator Management (read-only observers)
+    private spectatorManager: SpectatorManager = new SpectatorManager();
+
+    // Reconnection Management (grace period for reconnecting players)
+    private reconnectionManager: ReconnectionManager = new ReconnectionManager(RECONNECTION_GRACE_PERIOD_MS);
+
+    // Game History (for replay capability)
+    private gameHistory: GameHistory = new GameHistory(5000); // 5 second snapshot interval
 
     // Physics & Networking
     public physics: PhysicsWorld;
@@ -79,51 +92,85 @@ export class GameInstance extends EventEmitter {
         this.io.to(this.roomId).emit('gameState', this.getPublicState());
     }
 
-    public addPlayer(playerAddress: string, socketId: string): boolean {
+    public addPlayer(playerAddress: string, socketId: string, asSpectator: boolean = false): boolean {
         if (!this.players.includes(playerAddress)) {
-            // New player joining
-            if (this.status !== 'WAITING') {
-                // Game already started - can only spectate (not supported yet)
-                console.warn(`[GameInstance] Cannot join mid-game. Status: ${this.status}`);
+            // New player/spectator joining
+            if (this.status === 'WAITING' && !asSpectator) {
+                // Join as active player
+                if (this.players.length >= this.maxPlayers) {
+                    this.emit('playerJoinFailed', {
+                        reason: 'GAME_FULL',
+                        playerAddress
+                    });
+                    return false;
+                }
+
+                this.players.push(playerAddress);
+                this.playerSockets.set(playerAddress, socketId);
+                this.activePlayers.add(playerAddress);
+                this.lastActivityTime = Date.now();
+
+                console.log(`[GameInstance] Player ${playerAddress} joined. Now ${this.players.length}/${this.maxPlayers}`);
+                this.emit('playerJoined', { playerAddress });
+
+                // Auto-start game when enough players present
+                if (this.status === 'WAITING' && this.shouldAutoStart()) {
+                    this.startGame();
+                }
+
+                this.broadcastState();
+                return true;
+            } else if (this.status === 'ACTIVE' || asSpectator) {
+                // Join as spectator (watching active game or explicitly requested)
+                const success = this.spectatorManager.addSpectator(playerAddress, socketId);
+                if (success) {
+                    this.lastActivityTime = Date.now();
+                    this.emit('spectatorJoined', { playerAddress });
+                    this.broadcastState();
+                }
+                return success;
+            } else {
+                // Game ended or collapsed - no new joins
+                console.warn(`[GameInstance] Cannot join game. Status: ${this.status}`);
                 this.emit('playerJoinFailed', {
-                    reason: 'GAME_NOT_WAITING',
+                    reason: 'GAME_NOT_ACCEPTING_JOINS',
                     playerAddress
                 });
                 return false;
             }
-
-            if (this.players.length >= this.maxPlayers) {
-                this.emit('playerJoinFailed', {
-                    reason: 'GAME_FULL',
-                    playerAddress
-                });
-                return false;
-            }
-
-            this.players.push(playerAddress);
-            this.playerSockets.set(playerAddress, socketId);
-            this.activePlayers.add(playerAddress);
-            this.lastActivityTime = Date.now();
-
-            console.log(`[GameInstance] Player ${playerAddress} joined. Now ${this.players.length}/${this.maxPlayers}`);
-            this.emit('playerJoined', { playerAddress });
-
-            // Auto-start game when enough players present
-            if (this.status === 'WAITING' && this.shouldAutoStart()) {
-                this.startGame();
-            }
-
-            this.broadcastState();
-            return true;
         } else {
             // Reconnection logic
             this.playerSockets.set(playerAddress, socketId);
-            if (!this.activePlayers.has(playerAddress) && this.status !== 'ENDED' && this.status !== 'COLLAPSED') {
+            
+            // Check if player reconnected within grace period
+            const wasDisconnected = this.reconnectionManager.isDisconnected(playerAddress);
+            if (wasDisconnected) {
+                const timeRemaining = this.reconnectionManager.getTimeRemaining(playerAddress);
+                if (timeRemaining > 0) {
+                    // Reconnection is valid - restore player to active
+                    this.reconnectionManager.markReconnected(playerAddress);
+                    this.activePlayers.add(playerAddress);
+                    this.lastActivityTime = Date.now();
+                    console.log(`[GameInstance] Player ${playerAddress} reconnected within grace period`);
+                    this.emit('playerReconnected', { playerAddress });
+                    this.broadcastState();
+                    return true;
+                } else {
+                    // Grace period expired - player stays disconnected
+                    console.log(`[GameInstance] Player ${playerAddress} attempted reconnect but grace period expired`);
+                    this.emit('playerReconnectFailed', { playerAddress, reason: 'GRACE_PERIOD_EXPIRED' });
+                    return false;
+                }
+            } else if (!this.activePlayers.has(playerAddress) && this.status !== 'ENDED' && this.status !== 'COLLAPSED') {
+                // Player was already active (shouldn't happen but handle it)
                 this.activePlayers.add(playerAddress);
                 this.lastActivityTime = Date.now();
-                console.log(`[GameInstance] Player ${playerAddress} reconnected`);
+                console.log(`[GameInstance] Player ${playerAddress} re-established connection`);
                 this.emit('playerReconnected', { playerAddress });
+                this.broadcastState();
+                return true;
             }
+            
             this.broadcastState();
             return true;
         }
@@ -166,6 +213,14 @@ export class GameInstance extends EventEmitter {
         });
 
         console.log(`[GameInstance] Game ${this.id} started with ${players.length} players`);
+        
+        // Record game start in history
+        this.gameHistory.recordEvent('gameStarted', {
+            players,
+            difficulty: this.difficulty,
+            stake: this.stake
+        });
+
         this.emit('gameStarted', { players });
         this.broadcastState();
 
@@ -179,6 +234,9 @@ export class GameInstance extends EventEmitter {
         console.log(`[GameInstance] Player ${playerAddress.slice(0, 6)}... ${reason} from game ${this.id}`);
         this.activePlayers.delete(playerAddress);
         this.lastActivityTime = Date.now();
+
+        // Mark player as disconnected (start grace period)
+        this.reconnectionManager.markDisconnected(playerAddress, reason);
 
         // Notify turn manager if game is active
         if (this.turnManager && this.status === 'ACTIVE') {
@@ -201,6 +259,33 @@ export class GameInstance extends EventEmitter {
 
         this.emit('playerRemoved', { playerAddress, reason });
         this.broadcastState();
+    }
+
+    /**
+     * Remove a spectator from the game
+     */
+    public removeSpectator(socketId: string): void {
+        const spectator = this.spectatorManager.getSpectator(socketId);
+        if (spectator) {
+            this.spectatorManager.removeSpectator(socketId);
+            this.lastActivityTime = Date.now();
+            this.emit('spectatorRemoved', { address: spectator.address });
+            this.broadcastState();
+        }
+    }
+
+    /**
+     * Check if a socket ID belongs to a spectator
+     */
+    public isSpectator(socketId: string): boolean {
+        return this.spectatorManager.isSpectator(socketId);
+    }
+
+    /**
+     * Get spectator count
+     */
+    public getSpectatorCount(): number {
+        return this.spectatorManager.getSpectatorCount();
     }
 
     /**
@@ -231,6 +316,14 @@ export class GameInstance extends EventEmitter {
         // Apply physics immediately if move is valid
         this.lastActivityTime = Date.now();
         this.physics.applyForce(move.blockIndex, move.force, move.point);
+
+        // Record move in game history
+        this.gameHistory.recordEvent('move', {
+            playerAddress,
+            blockIndex: move.blockIndex,
+            force: move.force,
+            point: move.point
+        });
 
         // Emit move accepted confirmation
         this.io.to(this.roomId).emit('moveAccepted', { playerAddress });
@@ -273,6 +366,12 @@ export class GameInstance extends EventEmitter {
             this.timeSinceLastBroadcast = 0;
         }
 
+        // Take periodic snapshots for replay capability
+        if (this.gameHistory.shouldTakeSnapshot()) {
+            const physicsState = this.physics.getState();
+            this.gameHistory.recordSnapshot(this.getPublicState(), physicsState);
+        }
+
         // Check Collapse
         if (this.physics.checkCollapse()) {
             this.handleCollapse();
@@ -283,11 +382,29 @@ export class GameInstance extends EventEmitter {
         if (this.turnManager.isTimeoutReached()) {
             this.turnManager.endTurn();
         }
+
+        // Clean up players who exceeded reconnection grace period
+        const expiredPlayers = this.reconnectionManager.getExpiredPlayers();
+        for (const expiredPlayer of expiredPlayers) {
+            console.log(`[GameInstance] Permanently removing ${expiredPlayer.address} - reconnection grace period expired`);
+            this.reconnectionManager.removePlayer(expiredPlayer.address);
+            this.players = this.players.filter(p => p !== expiredPlayer.address);
+            this.playerSockets.delete(expiredPlayer.address);
+            this.emit('playerPermanentlyRemoved', {
+                playerAddress: expiredPlayer.address,
+                reason: 'GRACE_PERIOD_EXPIRED'
+            });
+        }
     }
 
     private async handleCollapse() {
         console.log(`Game ${this.id} Collapsed!`);
         this.status = 'COLLAPSED';
+
+        // Record collapse in game history
+        this.gameHistory.recordEvent('collapse', {
+            survivors: Array.from(this.activePlayers)
+        });
 
         // Oracle Reporting
         if (!this.isPractice) {
@@ -302,5 +419,30 @@ export class GameInstance extends EventEmitter {
             survivors: Array.from(this.activePlayers)
         });
         this.broadcastState();
+    }
+
+    /**
+     * Get replay data for this game
+     */
+    public getReplayData() {
+        return this.gameHistory.exportReplayData(
+            this.id,
+            this.turnManager?.getState().startTime || Date.now(),
+            this.status,
+            Array.from(this.activePlayers)
+        );
+    }
+
+    /**
+     * Get game history stats
+     */
+    public getHistoryStats() {
+        const memUsage = this.gameHistory.getMemoryUsage();
+        return {
+            snapshotCount: this.gameHistory.getSnapshotCount(),
+            eventCount: this.gameHistory.getEventCount(),
+            memoryUsage: memUsage,
+            currentVersion: this.gameHistory.getCurrentVersion()
+        };
     }
 }

@@ -92,12 +92,14 @@ io.on('connection', (socket) => {
         // Support both old format (string) and new format (object)
         let playerAddress: string;
         let gameId: number | undefined;
+        let asSpectator: boolean = false;
 
         if (typeof data === 'string') {
             playerAddress = data;
         } else {
             playerAddress = data.address;
             gameId = data.gameId;
+            asSpectator = data.asSpectator || false;
         }
 
         // SECURITY: Enforce that joining address matches authenticated socket address
@@ -107,7 +109,7 @@ io.on('connection', (socket) => {
             return;
         }
 
-        const game = gameManager.joinGame(socket, playerAddress, gameId);
+        const game = gameManager.joinGame(socket, playerAddress, gameId, asSpectator);
 
         if (!game) {
             socket.emit('error', 'Could not find a game to join or create.');
