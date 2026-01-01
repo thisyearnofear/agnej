@@ -24,48 +24,64 @@ export class GameManager {
         let game: GameInstance | undefined;
 
         if (gameId) {
+            // Join specific game by ID
             game = this.games.get(gameId);
+            if (!game) {
+                console.warn(`[GameManager] Game ${gameId} not found`);
+                socket.emit('error', 'Game not found.');
+                return null;
+            }
         } else {
-            // Matchmaking: Find first WAITING game with space
-            for (const g of this.games.values()) {
-                if (g.status === 'WAITING' && g.players.length < g.maxPlayers) {
-                    game = g;
-                    break;
-                }
+            // Auto-matchmaking: Find first WAITING game with space
+            game = this.findAvailableGame();
+            if (!game) {
+                console.log(`[GameManager] No available games for ${playerAddress}. Player should create one.`);
+                socket.emit('error', 'No available games. Please create one.');
+                return null;
             }
         }
 
-        if (game) {
-            // SECURITY: Payment Verification
-            if (!game.isPractice && game.difficulty !== 'EASY') {
-                // Assuming 'EASY' might be free or logic differs? 
-                // Actually, let's stick to isPractice check. 
-                // If it's MULTIPLAYER (which implies !isPractice usually), we check.
-                // But wait, createGame allows isPractice=false.
-
-                // Check if player paid
-                const hasPaid = this.blockchain.hasPlayerPaid(game.id, playerAddress);
-                if (!hasPaid) {
-                    console.warn(`[GameManager] Access Denied: Player ${playerAddress} has not paid for game ${game.id}`);
-                    socket.emit('error', 'Access Denied: Payment not verified for this transaction.');
-                    return null;
-                }
+        // Payment verification for ranked games
+        if (!game.isPractice && game.difficulty !== 'EASY') {
+            const hasPaid = this.blockchain.hasPlayerPaid(game.id, playerAddress);
+            if (!hasPaid) {
+                console.warn(`[GameManager] Access Denied: Player ${playerAddress} has not paid for game ${game.id}`);
+                socket.emit('error', 'Access Denied: Payment not verified.');
+                return null;
             }
-
-            // Join Socket.io room
-            socket.join(game.roomId);
-
-            // Add to game logic
-            game.addPlayer(playerAddress, socket.id);
-
-            // Map socket for quick lookup
-            this.socketGameMap.set(socket.id, game.id);
-
-            console.log(`[GameManager] Player ${playerAddress} joined game ${game.id}`);
-            return game;
         }
 
-        return null;
+        // Join Socket.io room
+        socket.join(game.roomId);
+
+        // Add to game logic
+        const success = game.addPlayer(playerAddress, socket.id);
+        if (!success) {
+            socket.leave(game.roomId);
+            socket.emit('error', 'Could not join game. Game full or not accepting players.');
+            return null;
+        }
+
+        // Map socket for quick lookup
+        this.socketGameMap.set(socket.id, game.id);
+
+        console.log(`[GameManager] Player ${playerAddress} joined game ${game.id}`);
+        return game;
+    }
+
+    /**
+     * Find the first available game for auto-matchmaking
+     * DRY principle: Single source for matchmaking logic
+     */
+    private findAvailableGame(): GameInstance | undefined {
+        for (const game of this.games.values()) {
+            if (game.status === 'WAITING' && 
+                !game.isPractice && 
+                game.players.length < game.maxPlayers) {
+                return game;
+            }
+        }
+        return undefined;
     }
 
     public handleDisconnect(socketId: string) {
@@ -116,8 +132,11 @@ export class GameManager {
         }
     }
 
+    /**
+     * Get all public lobbies available for joining
+     * Only returns games that are waiting and not practice
+     */
     public getPublicLobbies() {
-        // Return list of WAITING games
         const lobbies = [];
         for (const game of this.games.values()) {
             if (game.status === 'WAITING' && game.difficulty !== 'EASY') { // Filter practice? Or show all?
@@ -127,6 +146,10 @@ export class GameManager {
         return lobbies;
     }
 
+    /**
+     * Main game loop: update all active games and clean up stale ones
+     * Cleanup follows configurable retention policies
+     */
     private tick() {
         const dt = 1 / 60;
         for (const [id, game] of this.games.entries()) {
@@ -134,14 +157,14 @@ export class GameManager {
                 game.update(dt);
             }
 
-            // Cleanup Logic
+            // Cleanup Logic: Remove stale games based on status and inactivity
             const now = Date.now();
             const inactiveTime = now - game.lastActivityTime;
             let shouldDelete = false;
 
-            // 1. Finished Games: Keep for 5 minutes for results
+            // 1. Finished Games: Keep for 5 minutes for results/replay
             if ((game.status === 'ENDED' || game.status === 'COLLAPSED') && inactiveTime > 5 * 60 * 1000) {
-                console.log(`[GameManager] Cleaning up finished game ${id} (expired)`);
+                console.log(`[GameManager] Cleaning up finished game ${id} (result retention expired)`);
                 shouldDelete = true;
             }
 

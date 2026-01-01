@@ -1,11 +1,15 @@
 import { Server } from 'socket.io';
+import { EventEmitter } from 'events';
 import { PhysicsWorld } from '../physics';
 import { BlockchainService } from '../services/blockchain';
 import { GameConfig, GameState, MoveData } from './types';
+import { TurnManager } from './TurnManager';
+import { MoveValidator, ValidationResult } from './MoveValidator';
+import { GameError, GameErrorCode, createGameError } from './errors';
 
 const TURN_DURATION_MS = 30000;
 
-export class GameInstance {
+export class GameInstance extends EventEmitter {
     public id: number;
     public io: Server;
     public blockchain: BlockchainService;
@@ -14,8 +18,6 @@ export class GameInstance {
     public players: string[] = [];
     public playerSockets: Map<string, string> = new Map(); // address -> socketId
     public activePlayers: Set<string> = new Set();
-    public currentPlayerIndex: number = 0;
-    public currentPlayer: string | null = null;
     public status: 'WAITING' | 'ACTIVE' | 'ENDED' | 'COLLAPSED' = 'WAITING';
 
     // Config
@@ -24,14 +26,12 @@ export class GameInstance {
     public stake: number;
     public isPractice: boolean;
 
-    // Turn Management
-    public turnStartTime: number = 0;
-    public turnDeadline: number = 0;
-    public turnInProgress: boolean = false;
+    // Turn Management (delegated to TurnManager)
+    private turnManager: TurnManager | null = null;
 
     // Physics & Networking
     public physics: PhysicsWorld;
-    public pendingMoves: Map<string, MoveData> = new Map();
+    private moveValidator: MoveValidator = new MoveValidator();
 
     private timeSinceLastBroadcast: number = 0;
     private readonly BROADCAST_RATE_MS = 50; // 20Hz (1000ms / 20)
@@ -40,6 +40,7 @@ export class GameInstance {
     public lastActivityTime: number = Date.now();
 
     constructor(id: number, config: GameConfig, io: Server, blockchain: BlockchainService) {
+        super();
         this.id = id;
         this.io = io;
         this.blockchain = blockchain;
@@ -57,19 +58,20 @@ export class GameInstance {
     }
 
     public getPublicState(): GameState {
+        const turnState = this.turnManager?.getState();
         return {
             id: this.id,
             players: this.players,
-            currentPlayer: this.currentPlayer,
-            currentPlayerIndex: this.currentPlayerIndex,
+            currentPlayer: turnState?.currentPlayer || null,
+            currentPlayerIndex: this.players.findIndex(p => p === turnState?.currentPlayer) || 0,
             status: this.status,
             maxPlayers: this.maxPlayers,
             difficulty: this.difficulty,
             stake: this.stake,
             isPractice: this.isPractice,
             activePlayers: Array.from(this.activePlayers),
-            turnStartTime: this.turnStartTime,
-            turnDeadline: this.turnDeadline
+            turnStartTime: turnState?.startTime || 0,
+            turnDeadline: turnState?.deadline || 0
         };
     }
 
@@ -77,158 +79,187 @@ export class GameInstance {
         this.io.to(this.roomId).emit('gameState', this.getPublicState());
     }
 
-    public addPlayer(playerAddress: string, socketId: string) {
+    public addPlayer(playerAddress: string, socketId: string): boolean {
         if (!this.players.includes(playerAddress)) {
-            // Join Logic
-            if (this.status !== 'WAITING' && !this.players.includes(playerAddress)) {
-                // If game started, they can only spectate or reconnect? 
-                // For now, only allow joining if WAITING
-                // Or allow reconnect logic if they were already in `players` but not `activePlayers`?
-                // MVP: Only join if WAITING
+            // New player joining
+            if (this.status !== 'WAITING') {
+                // Game already started - can only spectate (not supported yet)
+                console.warn(`[GameInstance] Cannot join mid-game. Status: ${this.status}`);
+                this.emit('playerJoinFailed', {
+                    reason: 'GAME_NOT_WAITING',
+                    playerAddress
+                });
                 return false;
             }
 
-            if (!this.players.includes(playerAddress)) {
-                if (this.players.length >= this.maxPlayers) return false;
-                this.players.push(playerAddress);
+            if (this.players.length >= this.maxPlayers) {
+                this.emit('playerJoinFailed', {
+                    reason: 'GAME_FULL',
+                    playerAddress
+                });
+                return false;
             }
 
+            this.players.push(playerAddress);
             this.playerSockets.set(playerAddress, socketId);
             this.activePlayers.add(playerAddress);
             this.lastActivityTime = Date.now();
 
-            // Check auto-start
-            if (this.status === 'WAITING' && this.activePlayers.size >= 2 && !this.isPractice) {
-                // Wait for max players? Or just 2? 
-                // Original logic: if (size >= 2) startTurn()
-                // Let's stick to original, but maybe wait for full lobby is better?
-                // Original logic: "Auto-start if we have enough players" (>=2)
-                this.status = 'ACTIVE';
-                this.startTurn();
-            } else if (this.status === 'WAITING' && this.activePlayers.size >= this.maxPlayers) {
-                // definitely start if full
-                this.status = 'ACTIVE';
-                this.startTurn();
+            console.log(`[GameInstance] Player ${playerAddress} joined. Now ${this.players.length}/${this.maxPlayers}`);
+            this.emit('playerJoined', { playerAddress });
+
+            // Auto-start game when enough players present
+            if (this.status === 'WAITING' && this.shouldAutoStart()) {
+                this.startGame();
             }
 
             this.broadcastState();
             return true;
         } else {
-            // Reconnect logic
+            // Reconnection logic
             this.playerSockets.set(playerAddress, socketId);
             if (!this.activePlayers.has(playerAddress) && this.status !== 'ENDED' && this.status !== 'COLLAPSED') {
-                // They are back
                 this.activePlayers.add(playerAddress);
+                this.lastActivityTime = Date.now();
+                console.log(`[GameInstance] Player ${playerAddress} reconnected`);
+                this.emit('playerReconnected', { playerAddress });
             }
             this.broadcastState();
             return true;
         }
     }
 
-    public removePlayer(playerAddress: string, reason: string = 'disconnected') {
-        if (!this.activePlayers.has(playerAddress)) return;
-
-        console.log(`Player ${playerAddress.slice(0, 6)}... ${reason} from game ${this.id}`);
-        this.eliminatePlayer(playerAddress, reason);
+    /**
+     * Determine if game should auto-start based on player count
+     */
+    private shouldAutoStart(): boolean {
+        if (this.isPractice) return false;
+        return this.activePlayers.size >= 2 || this.activePlayers.size >= this.maxPlayers;
     }
 
-    private eliminatePlayer(playerAddress: string, reason: string) {
+    /**
+     * Start game and initialize turn manager
+     */
+    private startGame(): void {
+        if (this.status !== 'WAITING') return;
+
+        this.status = 'ACTIVE';
+        const players = Array.from(this.activePlayers);
+        this.turnManager = new TurnManager(players, TURN_DURATION_MS);
+
+        // Wire up turn manager events
+        this.turnManager.on('turnStarted', (turnState) => {
+            this.lastActivityTime = Date.now();
+            this.broadcastState();
+            this.io.to(this.roomId).emit('turnChanged', {
+                player: turnState.currentPlayer,
+                deadline: turnState.deadline
+            });
+        });
+
+        this.turnManager.on('turnEnding', (turnState) => {
+            this.processTurnEnd(turnState);
+        });
+
+        this.turnManager.on('moveRejected', (data) => {
+            this.io.to(this.roomId).emit('moveRejected', data);
+        });
+
+        console.log(`[GameInstance] Game ${this.id} started with ${players.length} players`);
+        this.emit('gameStarted', { players });
+        this.broadcastState();
+
+        // Start first turn
+        this.turnManager.startTurn();
+    }
+
+    public removePlayer(playerAddress: string, reason: string = 'disconnected'): void {
+        if (!this.activePlayers.has(playerAddress)) return;
+
+        console.log(`[GameInstance] Player ${playerAddress.slice(0, 6)}... ${reason} from game ${this.id}`);
         this.activePlayers.delete(playerAddress);
+        this.lastActivityTime = Date.now();
 
-        // If current player disconnected, advance turn immediately?
-        if (this.currentPlayer === playerAddress) {
-            this.turnDeadline = Date.now(); // Force timeout
+        // Notify turn manager if game is active
+        if (this.turnManager && this.status === 'ACTIVE') {
+            this.turnManager.removePlayer(playerAddress);
+            
+            // If current player disconnected, force turn timeout
+            if (this.turnManager.getCurrentPlayer() === playerAddress) {
+                this.turnManager.endTurn();
+            }
         }
 
-        // Check Game Over
-        if (this.activePlayers.size <= 1 && this.status === 'ACTIVE') {
+        // Check if game should end (only 1 or fewer players remain)
+        if (this.status === 'ACTIVE' && this.activePlayers.size <= 1) {
             this.status = 'ENDED';
-            // Natural end
+            this.emit('gameEnded', {
+                reason: 'PLAYER_ELIMINATION',
+                survivors: Array.from(this.activePlayers)
+            });
         }
 
+        this.emit('playerRemoved', { playerAddress, reason });
         this.broadcastState();
     }
 
-    // Logic from index.ts
-    private getNextPlayer(): string | null {
-        if (this.activePlayers.size === 0) return null;
+    /**
+     * Handle player move submission. Validates move and applies physics.
+     * Clear semantics: moves are validated, applied immediately, but turn duration is time-based.
+     */
+    public handleMove(playerAddress: string, move: MoveData): void {
+        if (this.status !== 'ACTIVE' || !this.turnManager) return;
 
-        const activeParams = Array.from(this.activePlayers);
-        // We need to ensure we cycle correctly even if players were removed
-        // Simple round-robin based on index might jump if array changes.
-        // Better: Find current index in new array, then +1
-        // But for MVP, let's stick to simple increment, modulo size
-        this.currentPlayerIndex = (this.currentPlayerIndex + 1) % activeParams.length;
-        return activeParams[this.currentPlayerIndex];
+        // Validate move data structure
+        const validation = this.moveValidator.validate(move);
+        if (!validation.isValid) {
+            console.warn(`[GameInstance] Invalid move from ${playerAddress}:`, validation.error?.message);
+            this.io.to(this.roomId).emit('moveRejected', {
+                playerAddress,
+                error: validation.error?.toJSON()
+            });
+            return;
+        }
+
+        // Submit move to turn manager for validation
+        const accepted = this.turnManager.submitMove(playerAddress, move);
+        if (!accepted) {
+            // TurnManager already emitted moveRejected
+            return;
+        }
+
+        // Apply physics immediately if move is valid
+        this.lastActivityTime = Date.now();
+        this.physics.applyForce(move.blockIndex, move.force, move.point);
+
+        // Emit move accepted confirmation
+        this.io.to(this.roomId).emit('moveAccepted', { playerAddress });
     }
 
-    public startTurn() {
+    /**
+     * Process end of turn. Called by TurnManager or timeout check.
+     * Handles turn advancement and validation.
+     */
+    private processTurnEnd(turnState: any): void {
+        if (!this.turnManager || this.status !== 'ACTIVE') return;
+
+        // Verify no more than 1 player remains
         if (this.activePlayers.size <= 1) {
             this.status = 'ENDED';
+            this.emit('gameEnded', {
+                reason: 'INSUFFICIENT_PLAYERS',
+                survivors: Array.from(this.activePlayers)
+            });
             this.broadcastState();
             return;
         }
 
-        const nextPlayer = this.getNextPlayer();
-        if (!nextPlayer) return;
-
-        this.currentPlayer = nextPlayer;
-        this.turnStartTime = Date.now();
-        this.turnDeadline = this.turnStartTime + TURN_DURATION_MS;
-
-        this.broadcastState();
-        this.io.to(this.roomId).emit('turnChanged', {
-            player: nextPlayer,
-            deadline: this.turnDeadline
-        });
-    }
-
-    public async endTurn() {
-        // Apply queued move
-        if (this.currentPlayer && this.pendingMoves.has(this.currentPlayer)) {
-            const move = this.pendingMoves.get(this.currentPlayer)!;
-            this.pendingMoves.delete(this.currentPlayer);
-            this.physics.applyForce(move.blockIndex, move.force, move.point);
-        }
-
-        this.startTurn();
-    }
-
-    public handleMove(playerAddress: string, move: MoveData) {
-        if (this.status !== 'ACTIVE') return;
-
-        if (this.currentPlayer === playerAddress) {
-            this.lastActivityTime = Date.now();
-            this.physics.applyForce(move.blockIndex, move.force, move.point);
-            // We do NOT end turn here. Turn ends by time in this design?
-            // "Check turn timeout (every frame but only acts when deadline passes)"
-            // Wait, usually moving ends turn?
-            // Original code:
-            // "Only process if this player's turn... physics.applyForce"
-            // It does NOT call endTurn().
-            // So turns are purely time based? That seems odd for Jenga.
-            // Usually you move, then wait for physics to settle, then turn ends.
-            // Original code has `TURN_DURATION_MS = 30000`.
-            // And `check turn timeout` calls `endTurn`.
-            // So it IS time based. AND `endTurn` calls `physics.applyForce` if pending?
-            // Wait, original code:
-            // "if (currentGameState.currentPlayer === playerAddress)... physics.applyForce"
-            // "async function endTurn()... if pendingMoves... applyForce"
-            // "turnTimeout... await endTurn()"
-            // It seems the original design was confused.
-            // If I move live, I apply force immediately.
-            // If I am lagging or it's not my turn, maybe it queues?
-            // Let's stick to: If it's your turn, apply force immediately.
-            // Does the turn end after a move?
-            // In Jenga, you touch a block, move it, place it.
-            // Here we just apply force (poke it).
-            // Let's keep the time-based turn for now as per original code, 
-            // but usually you'd want "End Turn" button or "Object Released" event.
-        }
+        // Start next turn
+        this.turnManager.startTurn();
     }
 
     public update(dt: number) {
-        if (this.status !== 'ACTIVE') return;
+        if (this.status !== 'ACTIVE' || !this.turnManager) return;
 
         // Physics Step (Fixed 60Hz from Manager)
         this.physics.step(dt);
@@ -248,14 +279,9 @@ export class GameInstance {
             return;
         }
 
-        // Check Turn Timeout
-        const now = Date.now();
-        if (!this.turnInProgress && this.turnDeadline > 0 && now >= this.turnDeadline) {
-            this.turnInProgress = true;
-            this.turnDeadline = 0;
-            this.endTurn().finally(() => {
-                this.turnInProgress = false;
-            });
+        // Check Turn Timeout (delegated to TurnManager)
+        if (this.turnManager.isTimeoutReached()) {
+            this.turnManager.endTurn();
         }
     }
 

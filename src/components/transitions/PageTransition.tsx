@@ -6,7 +6,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 interface PageTransitionProps {
   children: React.ReactNode
   key?: string
-  transitionType?: 'fade' | 'slide' | 'scale' | 'flip'
+  transitionType?: 'fade' | 'slide' | 'scale' | 'flip' | 'scan'
   duration?: number
 }
 

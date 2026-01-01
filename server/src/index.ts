@@ -114,18 +114,28 @@ io.on('connection', (socket) => {
         }
     });
 
-    // Handle Physics Moves
+    // Handle Physics Moves (with validation)
     socket.on('submitMove', (data: { blockIndex: number, force: any, point: any }) => {
-        gameManager.handleMove(socket.id, data);
+        try {
+            gameManager.handleMove(socket.id, data);
+        } catch (error: any) {
+            console.error('[Move Handler] Error:', error.message);
+            socket.emit('error', 'Failed to process move.');
+        }
     });
 
     // Handle Surrender
     socket.on('surrender', () => {
-        gameManager.handleSurrender(socket.id);
+        try {
+            gameManager.handleSurrender(socket.id);
+        } catch (error: any) {
+            console.error('[Surrender Handler] Error:', error.message);
+            socket.emit('error', 'Failed to process surrender.');
+        }
     });
 
     socket.on('disconnect', () => {
-        console.log('Client disconnected:', socket.id);
+        console.log('[Socket] Client disconnected:', socket.id);
         gameManager.handleDisconnect(socket.id);
     });
 });

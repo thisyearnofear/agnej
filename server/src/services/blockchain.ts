@@ -74,26 +74,74 @@ export class BlockchainService {
         });
     }
 
-    // For MVP: Simplified reporting that only calls blockchain on game conclusion
+    /**
+     * Report game collapse to blockchain with retry logic
+     * Uses exponential backoff to handle transient failures
+     * Returns true if successful, false if all retries exhausted
+     */
     public async reportCollapse(gameId: number, maxRetries: number = 3): Promise<boolean> {
         for (let attempt = 1; attempt <= maxRetries; attempt++) {
             try {
-                console.log(`Oracle: Reporting collapse for game ${gameId} (attempt ${attempt}/${maxRetries})`);
+                console.log(`[Oracle] Reporting collapse for game ${gameId} (attempt ${attempt}/${maxRetries})`);
                 const tx = await this.contract.reportCollapse(gameId);
-                console.log(`Oracle: Transaction sent: ${tx.hash}`);
-                await tx.wait();
-                console.log('Oracle: Collapse reported on-chain');
-                return true;
+                console.log(`[Oracle] Transaction sent: ${tx.hash}`);
+                const receipt = await tx.wait();
+                if (receipt) {
+                    console.log(`[Oracle] Collapse reported on-chain. Block: ${receipt.blockNumber}`);
+                    return true;
+                }
             } catch (error: any) {
-                console.error(`Oracle Error (reportCollapse attempt ${attempt}):`, error.message);
-                if (attempt === maxRetries) {
-                    console.error(`Oracle: Failed to report collapse after ${maxRetries} attempts`);
+                const errorMsg = error?.message || 'Unknown error';
+                const isRetryable = this.isRetryableError(error);
+                
+                console.error(
+                    `[Oracle] Failed to report collapse (attempt ${attempt}/${maxRetries}): ${errorMsg}`,
+                    { retryable: isRetryable }
+                );
+
+                if (attempt === maxRetries || !isRetryable) {
+                    console.error(`[Oracle] Giving up on collapse report for game ${gameId}`);
                     return false;
                 }
-                // Wait before retrying (exponential backoff)
-                await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+
+                // Exponential backoff: 1s, 2s, 4s
+                const delayMs = 1000 * Math.pow(2, attempt - 1);
+                console.log(`[Oracle] Retrying in ${delayMs}ms...`);
+                await new Promise(resolve => setTimeout(resolve, delayMs));
             }
         }
         return false;
+    }
+
+    /**
+     * Determine if an error is retryable (transient) or permanent
+     * Permanent errors: invalid inputs, authentication, etc.
+     * Transient errors: network timeouts, rate limits, etc.
+     */
+    private isRetryableError(error: any): boolean {
+        const message = error?.message?.toLowerCase() || '';
+        const code = error?.code;
+
+        // Non-retryable errors
+        const permanentPatterns = [
+            'invalid',
+            'unauthorized',
+            'forbidden',
+            'not found',
+            'revert'
+        ];
+
+        if (permanentPatterns.some(p => message.includes(p))) {
+            return false;
+        }
+
+        // Retryable error codes
+        const retryableCodes = ['ETIMEDOUT', 'ECONNREFUSED', 'ENOTFOUND'];
+        if (retryableCodes.includes(code)) {
+            return true;
+        }
+
+        // Default to retryable for unknown errors (network issues)
+        return true;
     }
 }

@@ -12,7 +12,9 @@ export default function InteractiveTower() {
     x: number, y: number, width: number, height: number, 
     color: string, depth: number, angle: number, 
     vx: number, vy: number, rotation: number
-  }>>([])
+  }>>([]
+  )
+  const initBlocksRef = useRef<(() => void) | null>(null)
 
   useEffect(() => {
     const checkMobile = () => setIsMobile(window.innerWidth < 768)
@@ -30,11 +32,7 @@ export default function InteractiveTower() {
     if (!ctx) return
     
     let animationFrameId: number
-    let blocks: Array<{
-      x: number, y: number, width: number, height: number, 
-      color: string, depth: number, angle: number, 
-      vx: number, vy: number, rotation: number
-    }> = []
+    const blocks = blocksRef.current
     
     // Automatic physics demonstration
     const physicsInterval = setInterval(() => {
@@ -54,7 +52,7 @@ export default function InteractiveTower() {
     
     // Initialize blocks with 3D perspective
     const initBlocks = () => {
-      blocks = []
+      blocksRef.current.length = 0
       const blockWidth = 60
       const blockHeight = 20
       const blockDepth = 15
@@ -66,7 +64,7 @@ export default function InteractiveTower() {
         const perspectiveScale = 1 - (i * 0.02) // Simulate depth
         
         for (let j = 0; j < 3; j++) {
-          blocks.push({
+          blocksRef.current.push({
             x: offsetX + j * blockWidth,
             y: canvas.height - (i + 1) * blockHeight,
             width: blockWidth * perspectiveScale,
@@ -192,6 +190,7 @@ export default function InteractiveTower() {
     // Set canvas size
     canvas.width = canvas.offsetWidth
     canvas.height = canvas.offsetHeight
+    initBlocksRef.current = initBlocks
     initBlocks()
     animate()
     
@@ -214,16 +213,16 @@ export default function InteractiveTower() {
     setIsInteracting(true)
     
     // Add physics impulse to clicked block
-    if (blocks[blockIndex]) {
-      blocks[blockIndex].vx = (Math.random() - 0.5) * 5
-      blocks[blockIndex].vy = -5
+    if (blocksRef.current[blockIndex]) {
+      blocksRef.current[blockIndex].vx = (Math.random() - 0.5) * 5
+      blocksRef.current[blockIndex].vy = -5
     }
     
     // Reset interaction after animation
     setTimeout(() => {
       setIsInteracting(false)
       // Reset tower after physics simulation
-      initBlocks()
+      if (initBlocksRef.current) initBlocksRef.current()
     }, 2000)
   }
 

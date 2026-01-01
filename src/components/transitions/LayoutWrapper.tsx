@@ -12,7 +12,7 @@ export default function LayoutWrapper({ children }: LayoutWrapperProps) {
   const pathname = usePathname()
   
   // Determine transition type based on route
-  const getTransitionType = () => {
+  const getTransitionType = (): 'fade' | 'slide' | 'scale' | 'flip' | 'scan' => {
     if (pathname.includes('/play')) return 'scan'
     if (pathname.includes('/leaderboard')) return 'scan'
     return 'scan' // default to dramatic scan effect
