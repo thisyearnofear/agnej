@@ -162,6 +162,8 @@ export class GameInstance extends EventEmitter {
                     this.lastActivityTime = Date.now();
                     console.log(`[GameInstance] Player ${playerAddress} reconnected within grace period`);
                     this.emit('playerReconnected', { playerAddress });
+                    // Emit to client
+                    this.io.to(this.roomId).emit('playerReconnected', { playerAddress });
                     this.broadcastState();
                     return true;
                 } else {
@@ -169,6 +171,8 @@ export class GameInstance extends EventEmitter {
                     this.metrics.recordReconnectFailure();
                     console.log(`[GameInstance] Player ${playerAddress} attempted reconnect but grace period expired`);
                     this.emit('playerReconnectFailed', { playerAddress, reason: 'GRACE_PERIOD_EXPIRED' });
+                    // Emit to client
+                    this.io.to(this.roomId).emit('playerReconnectFailed', { playerAddress, reason: 'GRACE_PERIOD_EXPIRED' });
                     return false;
                 }
             } else if (!this.activePlayers.has(playerAddress) && this.status !== 'ENDED' && this.status !== 'COLLAPSED') {
@@ -251,6 +255,8 @@ export class GameInstance extends EventEmitter {
         // Mark player as disconnected (start grace period)
         if (reason === 'disconnected') {
             this.metrics.recordDisconnect();
+            // Emit reconnection event to client
+            this.io.to(this.roomId).emit('playerDisconnected', { playerAddress });
         }
         this.reconnectionManager.markDisconnected(playerAddress, reason);
 

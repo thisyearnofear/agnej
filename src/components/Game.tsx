@@ -140,6 +140,11 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
   const [dragIndicator, setDragIndicator] = React.useState<{ x: number, y: number, length: number, angle: number } | null>(null)
   // Visual Helpers State
   const [showHelpers, setShowHelpers] = React.useState(settings.showHelpers)
+  
+  // Reconnection State (ENHANCEMENT: Add to existing component)
+  const [reconnectionStatus, setReconnectionStatus] = React.useState<'connected' | 'disconnected' | 'reconnecting' | 'grace_period'>('connected')
+  const [gracePeriodEnd, setGracePeriodEnd] = React.useState<number | null>(null)
+  const [reconnectionAttempts, setReconnectionAttempts] = React.useState(0)
 
 
   // Multiplayer timer (from server) or solo timer
@@ -235,7 +240,46 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
 
   useEffect(() => {
     socketRef.current = socket
-  }, [socket])
+    
+    // ENHANCEMENT: Add reconnection event listeners to existing socket
+    if (socket && settings.gameMode === 'MULTIPLAYER') {
+      socket.on('playerDisconnected', (data: { playerAddress: string }) => {
+        if (data.playerAddress === address) {
+          setReconnectionStatus('disconnected')
+          setGracePeriodEnd(Date.now() + 30000) // 30 second grace period
+          setReconnectionAttempts(0)
+        }
+      })
+      
+      socket.on('playerReconnected', (data: { playerAddress: string }) => {
+        if (data.playerAddress === address) {
+          setReconnectionStatus('connected')
+          setGracePeriodEnd(null)
+        }
+      })
+      
+      socket.on('playerReconnectFailed', (data: { playerAddress: string, reason: string }) => {
+        if (data.playerAddress === address) {
+          setReconnectionStatus('grace_period')
+          setGracePeriodEnd(null)
+        }
+      })
+      
+      socket.on('reconnect_attempt', () => {
+        setReconnectionAttempts(prev => prev + 1)
+        setReconnectionStatus('reconnecting')
+      })
+      
+      socket.on('reconnect_success', () => {
+        setReconnectionStatus('connected')
+        setReconnectionAttempts(0)
+      })
+      
+      socket.on('reconnect_failed', () => {
+        setReconnectionStatus('disconnected')
+      })
+    }
+  }, [socket, address, settings.gameMode])
 
   useEffect(() => {
     if (settings.gameMode === 'SOLO_PRACTICE' || settings.gameMode === 'SOLO_COMPETITOR') return
@@ -1053,6 +1097,75 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
           timeLeft={timeLeft}
           isCollapsed={towerCollapsed}
         />
+      )}
+
+      {/* Reconnection Status Overlay (ENHANCEMENT: Add to existing component) */}
+      {settings.gameMode === 'MULTIPLAYER' && reconnectionStatus !== 'connected' && !gameOver && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center pointer-events-none">
+          <div className="bg-black/80 backdrop-blur-md border border-yellow-500/30 rounded-2xl p-6 text-center shadow-2xl">
+            {/* Reconnection Status Header */}
+            <div className="text-yellow-400 font-black text-lg mb-3">
+              {reconnectionStatus === 'disconnected' && '🔌 DISCONNECTED'}
+              {reconnectionStatus === 'reconnecting' && '🔄 RECONNECTING'}
+              {reconnectionStatus === 'grace_period' && '⏰ GRACE PERIOD EXPIRED'}
+            </div>
+
+            {/* Status Message */}
+            <div className="text-gray-300 text-sm mb-4">
+              {reconnectionStatus === 'disconnected' && (
+                <>
+                  Attempting to reconnect...<br/>
+                  {reconnectionAttempts > 0 && <span>Attempt {reconnectionAttempts}/5</span>}
+                </>
+              )}
+              {reconnectionStatus === 'reconnecting' && (
+                <>
+                  Reconnecting to game...<br/>
+                  Attempt {reconnectionAttempts}/5
+                </>
+              )}
+              {reconnectionStatus === 'grace_period' && (
+                <>
+                  Grace period expired<br/>
+                  You have been removed from the game
+                </>
+              )}
+            </div>
+
+            {/* Grace Period Timer (if in grace period) */}
+            {reconnectionStatus === 'disconnected' && gracePeriodEnd && (
+              <div className="mb-4">
+                <div className="text-xs text-gray-400 mb-1">RECONNECTION WINDOW</div>
+                <div className="w-48 h-2 bg-black/50 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-yellow-400 transition-all duration-1000"
+                    style={{ 
+                      width: `${Math.max(0, Math.min(100, ((gracePeriodEnd - Date.now()) / 30000) * 100))}%` 
+                    }}
+                  />
+                </div>
+                <div className="text-xs text-gray-300 mt-1">
+                  {Math.ceil(Math.max(0, (gracePeriodEnd - Date.now()) / 1000))} seconds remaining
+                </div>
+              </div>
+            )}
+
+            {/* Action Button */}
+            {reconnectionStatus === 'grace_period' && (
+              <button
+                onClick={() => {
+                  if (socketRef.current) {
+                    socketRef.current.emit('reconnect', { address })
+                    setReconnectionStatus('reconnecting')
+                  }
+                }}
+                className="pointer-events-auto mt-4 bg-yellow-600 hover:bg-yellow-500 text-white font-bold py-2 px-4 rounded-lg transition-colors"
+              >
+                Try Again
+              </button>
+            )}
+          </div>
+        </div>
       )}
 
 
