@@ -1,31 +1,38 @@
 # Game Mechanics & Rules
 
+This document consolidates all game mechanics, rules, and features for Agnej.
+
+## Table of Contents
+- [Game Modes](#game-modes)
+- [Multiplayer Mode](#multiplayer-mode)
+- [Mobile Features](#mobile-features)
+- [Contract Events](#contract-events)
+- [Security](#security)
+
 ## Game Modes
 
 ### Solo Practice Mode
-- **Description**: Practice with no restrictions or time limits
+- **Description**: Practice with no restrictions or time limits.
 - **Features**:
   - No timer
-  - All blocks moveable (including top layers)
+  - All blocks moveable
   - No scoring
   - No collapse penalties
   - Can reset tower anytime
-- **Purpose**: Learn mechanics, test strategies, practice controls
 
-### Solo Competitor Mode ⭐
-- **Objective**: Remove as many blocks as possible in 30 seconds
-- **Scoring Logic**: Block distance from tower center > 10 units = +1 score, timer resets
-- **Game Over**: Tower collapse or timer runs out
-- **On-chain Leaderboard**: Submit scores to smart contract, compete globally
+### Solo Competitor Mode
+- **Objective**: Remove as many blocks as possible in 30 seconds.
+- **Scoring Logic**: Block distance from tower center > 10 units = +1 score, timer resets.
+- **Game Over**: Tower collapse or timer runs out.
+- **On-chain Leaderboard**: Submit scores to smart contract, compete globally.
 
-#### Tower Configuration
+### Tower Configuration
 - **16 layers**, 3 blocks per layer (48 blocks total)
-- **Layers 0-13**: Normal blocks (blue) - **Moveable** ✓
-- **Layers 14-15**: Locked blocks - **Cannot Touch** ✗
+- **Layers 0-13**: Normal blocks (blue) - **Moveable**
+- **Layers 14-15**: Locked blocks - **Cannot Touch**
 - **Block dimensions**: 5 units long × 1 unit tall × 1.5 units wide
-- Layers alternate between X-axis and Z-axis orientation (Jenga-style)
 
-#### Difficulty Levels
+### Difficulty Levels
 
 | Difficulty | Mass | Friction | Restitution | Damping | Description |
 |-----------|------|----------|-------------|---------|-------------|
@@ -33,22 +40,22 @@
 | **MEDIUM** | 1.0 | 0.5 | 0.4 | 0.02 | Balanced physics |
 | **HARD** | 2.0 | 0.2 | 0.5 | 0.01 | Light, slippery blocks |
 
-### Multiplayer Mode
+## Multiplayer Mode
 
-#### Tower Structure
+### Tower Structure
 - **16 layers**, 3 blocks per layer (48 blocks total)
 - **Block dimensions**: 6 units long × 1 unit tall × 1.5 units wide
-- Jenga-style alternating orientation
 
-#### Game Flow
-1. **Waiting Phase**: Players join by staking 0.001 ETH, game waits for 2+ players
-2. **Game Start**: First 2 players trigger ACTIVE state
-3. **Active Play**: Players take 30-second turns removing blocks
-4. **Turn Timeout**: Automatic end if no input within 30 seconds
-5. **Collapse Detection**: If >40% of blocks fall, game ends
-6. **Game End**: Survivors split pot equally
+### Game Flow
+1. **Waiting Phase**: Players join by staking 0.001 ETH, game waits for 2+ players.
+2. **Game Start**: First 2 players trigger ACTIVE state.
+3. **Active Play**: Players take 30-second turns removing blocks.
+4. **Turn Timeout**: Automatic end if no input within 30 seconds.
+5. **Collapse Detection**: If >40% of blocks fall, game ends.
+6. **Game End**: Survivors split pot equally.
 
-#### Key Constants
+### Key Constants
+
 | Constant | Value |
 |----------|-------|
 | MAX_PLAYERS | 7 |
@@ -58,60 +65,61 @@
 | TURN_DURATION | 30 seconds |
 | COLLAPSE_THRESHOLD | 40% of blocks |
 
-#### Reload System
+### Reload System
 - **Cost**: 0.001 ETH per reload
 - **Max reloads**: 2 per game per player
 - **Timing**: Can reload anytime during ACTIVE state
 - **Effect**: Sets `isActive[player] = true` again
 
-## Mobile Features & Optimization
+## Mobile Features
 
 ### Mobile Gameplay Enhancements
 
 #### 1. Auto-Dismiss Rules Dialog
-- Dialog automatically closes when user tries to touch blocks
-- Returns early on first tap (doesn't process as block interaction)
-- Next tap works normally
-- Prevents blocking gameplay on mobile
+- Dialog automatically closes when user tries to touch blocks.
+- Returns early on first tap (doesn't process as block interaction).
+- Next tap works normally.
+- Prevents blocking gameplay on mobile.
 
 #### 2. Mobile-Optimized Dialog Design
-- **Visual**: Yellow warning banner "⚠️ This dialog is blocking gameplay"
-- **Close button**: Prominent with red background
-- **Responsive**: Compact on mobile (p-4 md:p-8)
-- **Scrollable**: max-h-[90vh] overflow-y-auto
-- **Smaller text**: text-xs md:text-sm for mobile
+- **Visual**: Yellow warning banner "⚠️ This dialog is blocking gameplay".
+- **Close button**: Prominent with red background.
+- **Responsive**: Compact on mobile (p-4 md:p-8).
+- **Scrollable**: max-h-[90vh] overflow-y-auto.
+- **Smaller text**: text-xs md:text-sm for mobile.
 
 #### 3. Enhanced Touch Controls
 
 **Visual Block Selection**:
-- Block glows green when selected
-- Provides immediate visual confirmation
-- Stores original color for restoration
+- Block glows green when selected.
+- Provides immediate visual confirmation.
+- Stores original color for restoration.
 
 **Haptic Feedback**:
-- On touch: 10ms vibration when block selected
-- On release: 10-50ms vibration proportional to drag strength
-- Only activates on devices with vibration support
+- On touch: 10ms vibration when block selected.
+- On release: 10-50ms vibration proportional to drag strength.
+- Only activates on devices with vibration support.
 
 **Drag Indicator**:
-- Green arrow overlay shows push direction
-- Arrow length indicates force strength
-- Power percentage displayed below arrow
-- Gradient effect from solid to transparent
-- Glowing drop shadow for visibility
+- Green arrow overlay shows push direction.
+- Arrow length indicates force strength.
+- Power percentage displayed below arrow.
+- Gradient effect from solid to transparent.
+- Glowing drop shadow for visibility.
 
 **Touch Workflow**:
-1. User taps block → Block glows green + vibrates
-2. User drags → Green arrow shows direction + "X% Power" label
-3. User releases → Stronger vibration + block flies in direction
+1. User taps block → Block glows green + vibrates.
+2. User drags → Green arrow shows direction + "X% Power" label.
+3. User releases → Stronger vibration + block flies in direction.
 
 #### 4. Smaller Help Button
-- Reduced size on mobile: p-1.5 md:p-2
-- Icon size: 16px mobile, 20px desktop
-- Positioned higher on mobile: top-4 md:top-20
-- Closer to edge: right-4 md:right-6
+- Reduced size on mobile: p-1.5 md:p-2.
+- Icon size: 16px mobile, 20px desktop.
+- Positioned higher on mobile: top-4 md:top-20.
+- Closer to edge: right-4 md:right-6.
 
 ### Mobile Detection
+
 ```typescript
 const [isMobile, setIsMobile] = useState(false)
 useEffect(() => {
@@ -123,7 +131,9 @@ useEffect(() => {
 ```
 
 ### 3D to 2D Projection for Overlay
+
 Converts 3D block position to 2D screen coordinates for drag indicator:
+
 ```typescript
 const screenStart = start.clone().project(camera)
 const screenX = (screenStart.x + 1) / 2 * rect.width

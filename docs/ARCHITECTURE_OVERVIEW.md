@@ -1,4 +1,16 @@
-# Setup & Architecture Guide
+# Architecture Overview
+
+This document provides an overview of the system architecture, setup, and key components of Agnej.
+
+## Table of Contents
+- [System Architecture](#system-architecture)
+- [Physics System](#physics-system)
+- [Smart Contracts](#smart-contracts)
+- [File Structure](#file-structure)
+- [Proof of Humanity Integration](#proof-of-humanity-integration)
+- [Multiplayer and Invite System](#multiplayer-and-invite-system)
+- [Performance Notes](#performance-notes)
+- [Tech Stack](#tech-stack)
 
 ## System Architecture
 
@@ -54,6 +66,7 @@
 - Latency: ~50-200ms
 
 ### Synchronization Flow
+
 1. Player drags block on client
 2. Client sends `submitMove` with force vector
 3. Server applies force in physics simulation
@@ -116,61 +129,6 @@ src/
     └── LeaderboardABI.ts           # Solo ABI
 ```
 
-## Setup & Development
-
-### Prerequisites
-- Node.js 18+
-- npm or yarn
-- Ethereum wallet (Linea Sepolia testnet)
-
-### Installation
-
-```bash
-git clone https://github.com/thisyearnofear/agnej.git
-cd agnej
-npm install
-
-# Backend dependencies
-cd server
-npm install
-cd ..
-```
-
-### Development
-
-#### Terminal 1: Frontend (Next.js on :3000)
-```bash
-npm run dev
-```
-
-#### Terminal 2: Backend (Express on :3001)
-```bash
-cd server
-npm run dev
-```
-
-Open [http://localhost:3000](http://localhost:3000)
-
-### Environment Variables
-
-**Frontend (.env.local)**
-```
-NEXT_PUBLIC_WALLET_CONNECT_ID=your_id
-NEXT_PUBLIC_RPC_URL=https://rpc.sepolia.linea.build
-NEXT_PUBLIC_CONTRACT_ADDRESS=0x1DFd9003590E4A67594748Ecec18451e6cBDDD90
-NEXT_PUBLIC_LEADERBOARD_ADDRESS=0x3127Ebc72F9760728cc2032DC28Ed7D2250bC9cF
-```
-
-**Backend (server/.env)**
-```
-# ORACLE_PRIVATE_KEY optional for MVP - only needed for blockchain interactions
-# Omit for server-only mode with no blockchain calls
-ORACLE_PRIVATE_KEY=your_private_key
-RPC_URL=https://rpc.sepolia.linea.build
-CONTRACT_ADDRESS=0x1DFd9003590E4A67594748Ecec18451e6cBDDD90
-PORT=3001
-```
-
 ## Proof of Humanity Integration
 
 ### Architecture Decision
@@ -190,9 +148,10 @@ Benefits:
 - Fair competition (real players compete)
 - Network effect (users naturally progress to verification)
 
-## Multiplayer & Invite System
+## Multiplayer and Invite System
 
 ### Turn Flow
+
 1. Player joins and stakes 0.001 ETH
 2. Game starts when 2+ players join
 3. Each player gets 30-second turn

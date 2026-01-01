@@ -57,10 +57,10 @@ See **[MULTIPLAYER_STABILIZATION.md](docs/MULTIPLAYER_STABILIZATION.md#-testing-
 
 Comprehensive documentation consolidated into 4 core guides:
 
-1. **[Setup & Architecture](docs/SETUP_AND_ARCHITECTURE.md)** - System design, physics engine, smart contracts, and PoH integration setup
+1. **[Deployment Guide](docs/DEPLOYMENT_GUIDE.md)** - Smart contract deployment, server setup, frontend configuration, and testing
 2. **[Game Mechanics](docs/GAME_MECHANICS.md)** - Game rules, tower structure, gameplay loops, and mobile features
-3. **[Implementation Guide](docs/IMPLEMENTATION_GUIDE.md)** - Component integration, deployment checklist, and code examples
-4. **[Roadmap & Strategy](docs/ROADMAP_AND_STRATEGY.md)** - Product vision, growth mechanics, implementation timeline, and success metrics
+3. **[Architecture Overview](docs/ARCHITECTURE_OVERVIEW.md)** - System design, physics engine, smart contracts, and PoH integration setup
+4. **[Implementation Summary](docs/IMPLEMENTATION_SUMMARY.md)** - Component integration, deployment checklist, and code examples
 
 ## ✨ Key Features
 
