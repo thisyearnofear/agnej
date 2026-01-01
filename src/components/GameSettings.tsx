@@ -17,6 +17,9 @@ export interface GameSettingsConfig {
   showHelpers: boolean
   isHost?: boolean
   joinedGameId?: number
+  
+  // ENHANCEMENT: Add spectator mode to existing interface
+  isSpectator?: boolean
 }
 
 interface GameSettingsProps {
@@ -41,6 +44,9 @@ export default function GameSettings({ onStart }: GameSettingsProps) {
   const [copied, setCopied] = useState(false)
   const [selectedLobbyId, setSelectedLobbyId] = useState<number | undefined>(undefined)
   const [isSigningAuth, setIsSigningAuth] = useState(false)
+  
+  // ENHANCEMENT: Add spectator mode to existing component
+  const [isSpectator, setIsSpectator] = useState(false)
   const { address } = useAccount()
   const { lobbies, fetchLobbies, signAndConnect, authSignature } = useGameSocket()
 
@@ -112,7 +118,10 @@ export default function GameSettings({ onStart }: GameSettingsProps) {
       stake: (gameMode === 'SOLO_PRACTICE' || gameMode === 'SOLO_COMPETITOR') ? 0 : stake,
       showHelpers,
       isHost: gameMode === 'MULTIPLAYER' ? isHost : true,
-      joinedGameId: selectedLobbyId
+      joinedGameId: selectedLobbyId,
+      
+      // ENHANCEMENT: Add spectator mode to existing settings
+      isSpectator: gameMode === 'MULTIPLAYER' && !isHost ? isSpectator : undefined
     }
     onStart(settings)
   }
@@ -272,6 +281,26 @@ export default function GameSettings({ onStart }: GameSettingsProps) {
               Join Game
             </button>
           </div>
+
+          {/* Spectator Mode Toggle (ENHANCEMENT: Add to existing UI) */}
+          {!isHost && (
+            <div className="mb-4 p-3 bg-white/5 rounded-lg border border-white/10">
+              <label className="flex items-center gap-3">
+                <input
+                  type="checkbox"
+                  checked={isSpectator}
+                  onChange={(e) => setIsSpectator(e.target.checked)}
+                  className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
+                />
+                <span className="text-white font-medium text-sm">
+                  Join as Spectator 👁️
+                </span>
+              </label>
+              <p className="text-xs text-gray-400 mt-1 ml-7">
+                Watch games without playing. No wallet verification required.
+              </p>
+            </div>
+          )}
 
           {/* Invite Friends Button */}
           {isHost && address && (

@@ -145,6 +145,9 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
   const [reconnectionStatus, setReconnectionStatus] = React.useState<'connected' | 'disconnected' | 'reconnecting' | 'grace_period'>('connected')
   const [gracePeriodEnd, setGracePeriodEnd] = React.useState<number | null>(null)
   const [reconnectionAttempts, setReconnectionAttempts] = React.useState(0)
+  
+  // Spectator State (ENHANCEMENT: Add to existing component)
+  const [isSpectatorMode, setIsSpectatorMode] = React.useState(settings.isSpectator || false)
 
 
   // Multiplayer timer (from server) or solo timer
@@ -1032,7 +1035,7 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
         gameMode={settings.gameMode}
         onJoin={() => {
           if (settings.gameMode === 'MULTIPLAYER') {
-            joinGame()
+            joinGame(isSpectatorMode) // ENHANCEMENT: Pass spectator mode
             setHasJoinedGame(true)
           } else {
             // Try contract first for other modes
@@ -1090,7 +1093,7 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
       )}
 
       {/* Spectator Overlay (Multiplayer) */}
-      {settings.gameMode === 'MULTIPLAYER' && isSpectator && !gameOver && (
+      {settings.gameMode === 'MULTIPLAYER' && (isSpectatorMode || isSpectator) && !gameOver && (
         <SpectatorOverlay
           currentPlayer={serverState?.currentPlayer || null}
           players={players}

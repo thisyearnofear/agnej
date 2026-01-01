@@ -207,9 +207,13 @@ export function useGameSocket(settings?: GameSettingsConfig) {
         }
     };
 
-    const joinGame = () => {
+    // ENHANCEMENT: Add spectator parameter to existing joinGame function
+    const joinGame = (asSpectator: boolean = false) => {
         if (socket && address) {
-            socket.emit('joinGame', address);
+            socket.emit('joinGame', {
+                address,
+                asSpectator
+            });
         }
     };
 
