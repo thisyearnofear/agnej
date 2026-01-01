@@ -8,6 +8,7 @@ import { MoveValidator, ValidationResult } from './MoveValidator';
 import { SpectatorManager } from './SpectatorManager';
 import { ReconnectionManager } from './ReconnectionManager';
 import { GameHistory } from './GameHistory';
+import { MetricsCollector } from './MetricsCollector';
 import { GameError, GameErrorCode, createGameError } from './errors';
 
 const TURN_DURATION_MS = 30000;
@@ -42,6 +43,9 @@ export class GameInstance extends EventEmitter {
     // Game History (for replay capability)
     private gameHistory: GameHistory = new GameHistory(5000); // 5 second snapshot interval
 
+    // Metrics Collection (for monitoring and analytics)
+    private metrics: MetricsCollector;
+
     // Physics & Networking
     public physics: PhysicsWorld;
     private moveValidator: MoveValidator = new MoveValidator();
@@ -64,6 +68,7 @@ export class GameInstance extends EventEmitter {
         this.isPractice = config.isPractice;
 
         this.physics = new PhysicsWorld(this.difficulty);
+        this.metrics = new MetricsCollector(id);
     }
 
     public get roomId(): string {
@@ -111,6 +116,7 @@ export class GameInstance extends EventEmitter {
                 this.lastActivityTime = Date.now();
 
                 console.log(`[GameInstance] Player ${playerAddress} joined. Now ${this.players.length}/${this.maxPlayers}`);
+                this.metrics.recordPlayerJoined();
                 this.emit('playerJoined', { playerAddress });
 
                 // Auto-start game when enough players present
@@ -125,6 +131,7 @@ export class GameInstance extends EventEmitter {
                 const success = this.spectatorManager.addSpectator(playerAddress, socketId);
                 if (success) {
                     this.lastActivityTime = Date.now();
+                    this.metrics.recordSpectatorJoined();
                     this.emit('spectatorJoined', { playerAddress });
                     this.broadcastState();
                 }
@@ -150,6 +157,8 @@ export class GameInstance extends EventEmitter {
                     // Reconnection is valid - restore player to active
                     this.reconnectionManager.markReconnected(playerAddress);
                     this.activePlayers.add(playerAddress);
+                    this.metrics.recordPlayerJoined();
+                    this.metrics.recordReconnectSuccess();
                     this.lastActivityTime = Date.now();
                     console.log(`[GameInstance] Player ${playerAddress} reconnected within grace period`);
                     this.emit('playerReconnected', { playerAddress });
@@ -157,6 +166,7 @@ export class GameInstance extends EventEmitter {
                     return true;
                 } else {
                     // Grace period expired - player stays disconnected
+                    this.metrics.recordReconnectFailure();
                     console.log(`[GameInstance] Player ${playerAddress} attempted reconnect but grace period expired`);
                     this.emit('playerReconnectFailed', { playerAddress, reason: 'GRACE_PERIOD_EXPIRED' });
                     return false;
@@ -196,6 +206,7 @@ export class GameInstance extends EventEmitter {
 
         // Wire up turn manager events
         this.turnManager.on('turnStarted', (turnState) => {
+            this.metrics.recordTurnStarted();
             this.lastActivityTime = Date.now();
             this.broadcastState();
             this.io.to(this.roomId).emit('turnChanged', {
@@ -205,6 +216,7 @@ export class GameInstance extends EventEmitter {
         });
 
         this.turnManager.on('turnEnding', (turnState) => {
+            this.metrics.recordTurnEnded();
             this.processTurnEnd(turnState);
         });
 
@@ -233,9 +245,13 @@ export class GameInstance extends EventEmitter {
 
         console.log(`[GameInstance] Player ${playerAddress.slice(0, 6)}... ${reason} from game ${this.id}`);
         this.activePlayers.delete(playerAddress);
+        this.metrics.recordPlayerRemoved();
         this.lastActivityTime = Date.now();
 
         // Mark player as disconnected (start grace period)
+        if (reason === 'disconnected') {
+            this.metrics.recordDisconnect();
+        }
         this.reconnectionManager.markDisconnected(playerAddress, reason);
 
         // Notify turn manager if game is active
@@ -251,6 +267,7 @@ export class GameInstance extends EventEmitter {
         // Check if game should end (only 1 or fewer players remain)
         if (this.status === 'ACTIVE' && this.activePlayers.size <= 1) {
             this.status = 'ENDED';
+            this.endGame();
             this.emit('gameEnded', {
                 reason: 'PLAYER_ELIMINATION',
                 survivors: Array.from(this.activePlayers)
@@ -268,6 +285,7 @@ export class GameInstance extends EventEmitter {
         const spectator = this.spectatorManager.getSpectator(socketId);
         if (spectator) {
             this.spectatorManager.removeSpectator(socketId);
+            this.metrics.recordSpectatorRemoved();
             this.lastActivityTime = Date.now();
             this.emit('spectatorRemoved', { address: spectator.address });
             this.broadcastState();
@@ -299,6 +317,7 @@ export class GameInstance extends EventEmitter {
         const validation = this.moveValidator.validate(move);
         if (!validation.isValid) {
             console.warn(`[GameInstance] Invalid move from ${playerAddress}:`, validation.error?.message);
+            this.metrics.recordMoveFailed();
             this.io.to(this.roomId).emit('moveRejected', {
                 playerAddress,
                 error: validation.error?.toJSON()
@@ -310,6 +329,7 @@ export class GameInstance extends EventEmitter {
         const accepted = this.turnManager.submitMove(playerAddress, move);
         if (!accepted) {
             // TurnManager already emitted moveRejected
+            this.metrics.recordMoveFailed();
             return;
         }
 
@@ -325,6 +345,9 @@ export class GameInstance extends EventEmitter {
             point: move.point
         });
 
+        // Record metrics
+        this.metrics.recordMoveSuccess();
+
         // Emit move accepted confirmation
         this.io.to(this.roomId).emit('moveAccepted', { playerAddress });
     }
@@ -339,6 +362,7 @@ export class GameInstance extends EventEmitter {
         // Verify no more than 1 player remains
         if (this.activePlayers.size <= 1) {
             this.status = 'ENDED';
+            this.endGame();
             this.emit('gameEnded', {
                 reason: 'INSUFFICIENT_PLAYERS',
                 survivors: Array.from(this.activePlayers)
@@ -406,6 +430,9 @@ export class GameInstance extends EventEmitter {
             survivors: Array.from(this.activePlayers)
         });
 
+        // Record collapse in metrics
+        this.metrics.recordCollapse(this.activePlayers.size);
+
         // Oracle Reporting
         if (!this.isPractice) {
             try {
@@ -414,6 +441,9 @@ export class GameInstance extends EventEmitter {
                 console.error(`Failed to report collapse for game ${this.id}`, error);
             }
         }
+
+        // End game and record final metrics
+        this.endGame();
 
         this.io.to(this.roomId).emit('gameCollapsed', {
             survivors: Array.from(this.activePlayers)
@@ -443,6 +473,45 @@ export class GameInstance extends EventEmitter {
             eventCount: this.gameHistory.getEventCount(),
             memoryUsage: memUsage,
             currentVersion: this.gameHistory.getCurrentVersion()
+        };
+    }
+
+    /**
+     * Record game end and export metrics
+     */
+    public endGame(): void {
+        this.metrics.recordGameEnd(this.activePlayers.size);
+    }
+
+    /**
+     * Get real-time metrics (lightweight, safe to call frequently)
+     */
+    public getRealTimeMetrics() {
+        return this.metrics.getRealTimeMetrics();
+    }
+
+    /**
+     * Export comprehensive game metrics (call at game end)
+     */
+    public exportMetrics() {
+        const historyStats = this.getHistoryStats();
+        return this.metrics.exportMetrics(
+            this.difficulty,
+            this.isPractice,
+            historyStats.memoryUsage,
+            historyStats.snapshotCount,
+            historyStats.eventCount
+        );
+    }
+
+    /**
+     * Get combined replay and metrics data
+     */
+    public exportGameAnalytics() {
+        return {
+            replay: this.getReplayData(),
+            metrics: this.exportMetrics(),
+            historyStats: this.getHistoryStats()
         };
     }
 }
