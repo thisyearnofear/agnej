@@ -26,6 +26,18 @@ interface GameOverProps {
     isConfirming?: boolean
     isConfirmed?: boolean
     onSubmitScore?: () => void
+    
+    // ENHANCEMENT: Add metrics display to existing component
+    metrics?: {
+        moveSuccessRate?: number
+        totalMoves?: number
+        successfulMoves?: number
+        failedMoves?: number
+        avgTurnDuration?: number
+        reconnectSuccessRate?: number
+        disconnectEvents?: number
+        gameDuration?: number
+    }
 }
 
 export default function GameOver({
@@ -45,7 +57,8 @@ export default function GameOver({
     isPending = false,
     isConfirming = false,
     isConfirmed = false,
-    onSubmitScore
+    onSubmitScore,
+    metrics
 }: GameOverProps) {
     const userAddress_lower = userAddress?.toLowerCase()
     const userWon = survivors.some(s => s.address.toLowerCase() === userAddress_lower && s.isWinner)
@@ -171,6 +184,65 @@ export default function GameOver({
                                 Claimed to your wallet 🏆
                             </div>
                         )}
+                    </div>
+                )}
+
+                {/* Metrics Display (ENHANCEMENT: Add to existing component) */}
+                {metrics && (
+                    <div className="bg-white/5 rounded-lg p-4 mb-6 border border-white/10">
+                        <div className="text-xs text-gray-400 uppercase tracking-wider font-bold mb-3">
+                            📊 Game Statistics
+                        </div>
+                        <div className="grid grid-cols-2 gap-3 text-sm">
+                            {metrics.moveSuccessRate !== undefined && (
+                                <div className="bg-blue-500/10 p-2 rounded-lg">
+                                    <div className="text-xs text-blue-300 mb-1">Move Success</div>
+                                    <div className="text-lg font-bold text-blue-400">
+                                        {metrics.moveSuccessRate}%
+                                    </div>
+                                </div>
+                            )}
+                            {metrics.totalMoves !== undefined && (
+                                <div className="bg-green-500/10 p-2 rounded-lg">
+                                    <div className="text-xs text-green-300 mb-1">Total Moves</div>
+                                    <div className="text-lg font-bold text-green-400">
+                                        {metrics.totalMoves}
+                                    </div>
+                                </div>
+                            )}
+                            {metrics.avgTurnDuration !== undefined && (
+                                <div className="bg-purple-500/10 p-2 rounded-lg">
+                                    <div className="text-xs text-purple-300 mb-1">Avg Turn Time</div>
+                                    <div className="text-lg font-bold text-purple-400">
+                                        {metrics.avgTurnDuration}s
+                                    </div>
+                                </div>
+                            )}
+                            {metrics.gameDuration !== undefined && (
+                                <div className="bg-orange-500/10 p-2 rounded-lg">
+                                    <div className="text-xs text-orange-300 mb-1">Game Duration</div>
+                                    <div className="text-lg font-bold text-orange-400">
+                                        {Math.round(metrics.gameDuration / 1000)}s
+                                    </div>
+                                </div>
+                            )}
+                            {metrics.reconnectSuccessRate !== undefined && (
+                                <div className="bg-yellow-500/10 p-2 rounded-lg">
+                                    <div className="text-xs text-yellow-300 mb-1">Reconnect Rate</div>
+                                    <div className="text-lg font-bold text-yellow-400">
+                                        {metrics.reconnectSuccessRate}%
+                                    </div>
+                                </div>
+                            )}
+                            {metrics.disconnectEvents !== undefined && (
+                                <div className="bg-red-500/10 p-2 rounded-lg">
+                                    <div className="text-xs text-red-300 mb-1">Disconnections</div>
+                                    <div className="text-lg font-bold text-red-400">
+                                        {metrics.disconnectEvents}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
                     </div>
                 )}
 

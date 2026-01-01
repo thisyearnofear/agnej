@@ -487,6 +487,10 @@ export class GameInstance extends EventEmitter {
      */
     public endGame(): void {
         this.metrics.recordGameEnd(this.activePlayers.size);
+        
+        // ENHANCEMENT: Emit game metrics to all clients
+        const metrics = this.getRealTimeMetrics();
+        this.io.to(this.roomId).emit('gameMetrics', metrics);
     }
 
     /**

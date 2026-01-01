@@ -148,6 +148,18 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
   
   // Spectator State (ENHANCEMENT: Add to existing component)
   const [isSpectatorMode, setIsSpectatorMode] = React.useState(settings.isSpectator || false)
+  
+  // Metrics State (ENHANCEMENT: Add to existing component)
+  const [gameMetrics, setGameMetrics] = React.useState<{
+    moveSuccessRate?: number
+    totalMoves?: number
+    successfulMoves?: number
+    failedMoves?: number
+    avgTurnDuration?: number
+    reconnectSuccessRate?: number
+    disconnectEvents?: number
+    gameDuration?: number
+  } | undefined>(undefined)
 
 
   // Multiplayer timer (from server) or solo timer
@@ -280,6 +292,20 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
       
       socket.on('reconnect_failed', () => {
         setReconnectionStatus('disconnected')
+      })
+      
+      // ENHANCEMENT: Add metrics event listener to existing socket
+      socket.on('gameMetrics', (metrics: {
+        moveSuccessRate?: number
+        totalMoves?: number
+        successfulMoves?: number
+        failedMoves?: number
+        avgTurnDuration?: number
+        reconnectSuccessRate?: number
+        disconnectEvents?: number
+        gameDuration?: number
+      }) => {
+        setGameMetrics(metrics)
       })
     }
   }, [socket, address, settings.gameMode])
@@ -1089,6 +1115,9 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
           isConfirming={isConfirmingScore}
           isConfirmed={isScoreConfirmed}
           onSubmitScore={address ? () => submitScore(settings.difficulty, score) : undefined}
+          
+          // ENHANCEMENT: Pass metrics to existing GameOver component
+          metrics={gameMetrics}
         />
       )}
 
