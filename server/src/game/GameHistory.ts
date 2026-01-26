@@ -14,14 +14,14 @@ export interface GameSnapshot {
     version: number;
     timestamp: number;
     gameState: GameState;
-    physicsState: any;
+    physicsState: unknown;
 }
 
 export interface GameEvent {
     version: number;
     timestamp: number;
     type: 'move' | 'turnChanged' | 'collapse' | 'playerJoined' | 'playerRemoved' | 'gameStarted' | 'gameEnded';
-    data: any;
+    data: Record<string, unknown>;
 }
 
 export interface GameReplayData {
@@ -48,7 +48,7 @@ export class GameHistory {
     /**
      * Record a game snapshot
      */
-    public recordSnapshot(gameState: GameState, physicsState: any): GameSnapshot {
+    public recordSnapshot(gameState: GameState, physicsState: unknown): GameSnapshot {
         const snapshot: GameSnapshot = {
             version: this.currentVersion++,
             timestamp: Date.now(),
@@ -66,7 +66,7 @@ export class GameHistory {
      */
     public recordEvent(
         type: GameEvent['type'],
-        data: any
+        data: Record<string, unknown>
     ): GameEvent {
         const event: GameEvent = {
             version: this.currentVersion,

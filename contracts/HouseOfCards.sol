@@ -6,9 +6,9 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 
 contract HouseOfCards is ReentrancyGuard, Ownable {
     // --- State Variables ---
-    
+
     enum GameState { WAITING, ACTIVE, VOTING, ENDED }
-    
+
     struct Game {
         uint256 id;
         GameState state;
@@ -26,12 +26,12 @@ contract HouseOfCards is ReentrancyGuard, Ownable {
 
     uint256 public currentGameId;
     mapping(uint256 => Game) public games;
-    
+
     // Referral System
     mapping(address => address) public referredBy;
     mapping(address => uint256) public referralCount;
     mapping(address => uint256) public referralEarnings;
-    
+
     // Config
     uint256 public constant MAX_PLAYERS = 7;
     uint256 public constant ENTRY_STAKE = 0.001 ether;
@@ -68,7 +68,7 @@ contract HouseOfCards is ReentrancyGuard, Ownable {
         if (referrer != address(0) && referrer != msg.sender && referredBy[msg.sender] == address(0)) {
             referredBy[msg.sender] = referrer;
             referralCount[referrer]++;
-            
+
             // Pay referral bonus immediately
             uint256 bonus = (msg.value * REFERRAL_BONUS_BPS) / 10000;
             if (bonus > 0) {
@@ -86,27 +86,34 @@ contract HouseOfCards is ReentrancyGuard, Ownable {
         emit PlayerJoined(currentGameId, msg.sender, referrer);
 
         if (game.players.length == MAX_PLAYERS) {
-            _startGame();
+            _startGame(currentGameId);
         }
     }
 
-    function _startGame() internal {
-        Game storage game = games[currentGameId];
+    function startGame(uint256 gameId) external onlyOwner {
+        _startGame(gameId);
+    }
+
+    function _startGame(uint256 gameId) internal {
+        Game storage game = games[gameId];
+        require(game.state == GameState.WAITING, "Game already started");
+        require(game.players.length >= 2, "Not enough players");
+
         game.state = GameState.ACTIVE;
         game.startTime = block.timestamp;
         game.lastMoveTime = block.timestamp;
         game.currentTurnIndex = 0;
         game.currentPlayer = game.players[0];
 
-        emit GameStarted(currentGameId);
-        emit TurnChanged(currentGameId, game.currentPlayer, block.timestamp + TURN_DURATION);
+        emit GameStarted(gameId);
+        emit TurnChanged(gameId, game.currentPlayer, block.timestamp + TURN_DURATION);
     }
 
     // Called by server oracle when a move is completed
     function completeTurn(uint256 gameId) external onlyOwner {
         Game storage game = games[gameId];
         require(game.state == GameState.ACTIVE, "Game not active");
-        
+
         // Move to next active player
         _nextTurn(game);
     }
@@ -115,12 +122,37 @@ contract HouseOfCards is ReentrancyGuard, Ownable {
     function timeoutTurn(uint256 gameId) external onlyOwner {
         Game storage game = games[gameId];
         require(game.state == GameState.ACTIVE, "Game not active");
-        
+
         // Eliminate current player
         _eliminatePlayer(game, game.currentPlayer, "Timeout");
-        
+
         // Move to next
         _nextTurn(game);
+    }
+
+    // Called by server oracle to eliminate a player (surrender or disconnect)
+    function eliminatePlayer(uint256 gameId, address player, string memory reason) external onlyOwner {
+        Game storage game = games[gameId];
+        require(game.state == GameState.ACTIVE, "Game not active");
+        require(game.isActive[player], "Player not active");
+
+        _eliminatePlayer(game, player, reason);
+
+        // Check for winner
+        uint256 activeCount = 0;
+        address lastSurvivor;
+        for(uint i=0; i<game.players.length; i++) {
+            if(game.isActive[game.players[i]]) {
+                activeCount++;
+                lastSurvivor = game.players[i];
+            }
+        }
+
+        if (activeCount == 1) {
+            _endGameWinner(game, lastSurvivor);
+        } else if (game.currentPlayer == player) {
+            _nextTurn(game);
+        }
     }
 
     function reload() external payable nonReentrant {
@@ -129,11 +161,11 @@ contract HouseOfCards is ReentrancyGuard, Ownable {
         require(!game.isActive[msg.sender], "Player still active");
         require(game.reloadCount[msg.sender] < MAX_RELOADS, "Max reloads reached");
         require(msg.value == RELOAD_COST, "Incorrect reload cost");
-        
+
         game.isActive[msg.sender] = true;
         game.reloadCount[msg.sender]++;
         game.pot += msg.value;
-        
+
         emit PlayerReloaded(currentGameId, msg.sender);
     }
 
@@ -143,14 +175,14 @@ contract HouseOfCards is ReentrancyGuard, Ownable {
     function reportCollapse(uint256 gameId) external onlyOwner {
         Game storage game = games[gameId];
         require(game.state == GameState.ACTIVE, "Game not active");
-        
+
         game.state = GameState.VOTING;
         emit GameCollapsed(gameId);
-        
+
         // Logic for voting would go here
         // For MVP, let's just split the pot among survivors for simplicity?
         // Or trigger the vote phase.
-        
+
         _distributePot(game);
     }
 
@@ -159,12 +191,12 @@ contract HouseOfCards is ReentrancyGuard, Ownable {
     function _nextTurn(Game storage game) internal {
         uint256 initialIndex = game.currentTurnIndex;
         uint256 nextIndex = (initialIndex + 1) % game.players.length;
-        
+
         // Find next active player
         while (!game.isActive[game.players[nextIndex]] && nextIndex != initialIndex) {
             nextIndex = (nextIndex + 1) % game.players.length;
         }
-        
+
         // If we looped back to start and they aren't active, everyone is dead (shouldn't happen)
         // If we found the same player, they are the winner
         if (nextIndex == initialIndex && !game.isActive[game.players[nextIndex]]) {
@@ -172,7 +204,7 @@ contract HouseOfCards is ReentrancyGuard, Ownable {
              game.state = GameState.ENDED;
              return;
         }
-        
+
         // Check for winner (only 1 active player left)
         uint256 activeCount = 0;
         address lastSurvivor;
@@ -182,7 +214,7 @@ contract HouseOfCards is ReentrancyGuard, Ownable {
                 lastSurvivor = game.players[i];
             }
         }
-        
+
         if (activeCount == 1) {
             _endGameWinner(game, lastSurvivor);
             return;
@@ -191,7 +223,7 @@ contract HouseOfCards is ReentrancyGuard, Ownable {
         game.currentTurnIndex = nextIndex;
         game.currentPlayer = game.players[nextIndex];
         game.lastMoveTime = block.timestamp;
-        
+
         emit TurnChanged(game.id, game.currentPlayer, block.timestamp + TURN_DURATION);
     }
 
@@ -204,23 +236,23 @@ contract HouseOfCards is ReentrancyGuard, Ownable {
         game.state = GameState.ENDED;
         uint256 amount = game.pot;
         game.pot = 0;
-        
+
         (bool sent, ) = winner.call{value: amount}("");
         require(sent, "Failed to send Ether");
-        
+
         emit GameEnded(game.id, winner, amount);
-        
+
         // Start new game
         _createGame();
     }
-    
+
     function _distributePot(Game storage game) internal {
         // MVP: Split equally among survivors
         uint256 activeCount = 0;
         for(uint i=0; i<game.players.length; i++) {
             if(game.isActive[game.players[i]]) activeCount++;
         }
-        
+
         if (activeCount > 0) {
             uint256 share = game.pot / activeCount;
             for(uint i=0; i<game.players.length; i++) {
@@ -231,7 +263,7 @@ contract HouseOfCards is ReentrancyGuard, Ownable {
             }
             emit PotSplit(game.id, share);
         }
-        
+
         game.state = GameState.ENDED;
         game.pot = 0;
         _createGame();

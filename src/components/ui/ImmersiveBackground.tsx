@@ -29,29 +29,41 @@ export default function ImmersiveBackground({ children }: { children: React.Reac
     })
   }, [controls])
 
-  // Create scanning effect particles with more drama
-  const particles = Array.from({ length: isMobile ? 20 : 40 }).map((_, i) => {
-    const size = Math.random() * (isMobile ? 120 : 200) + 80
-    const delay = Math.random() * 3
-    const duration = Math.random() * 15 + 10
-    const x = Math.random() * 120 - 10
-    const y = Math.random() * 120 - 10
-    const color = i % 3 === 0 ? 'from-blue-500/30 to-purple-500/20' : 
-                  i % 3 === 1 ? 'from-purple-500/30 to-pink-500/20' : 
-                  'from-blue-400/30 to-cyan-400/20'
+  // Generate particle properties using useMemo to avoid calling Math.random during render
+  const particleData = React.useMemo(() => {
+    return Array.from({ length: isMobile ? 20 : 40 }).map((_, i) => ({
+      size: Math.random() * (isMobile ? 120 : 200) + 80,
+      delay: Math.random() * 3,
+      duration: Math.random() * 15 + 10,
+      x: Math.random() * 120 - 10,
+      y: Math.random() * 120 - 10,
+      animX: [0, Math.random() * 20 - 10, 0], // Pre-calculate animation values
+      animY: [0, Math.random() * 20 - 10, 0], // Pre-calculate animation values
+      color: i % 3 === 0 ? 'from-blue-500/30 to-purple-500/20' :
+             i % 3 === 1 ? 'from-purple-500/30 to-pink-500/20' :
+             'from-blue-400/30 to-cyan-400/20'
+    }));
+  }, [isMobile]);
 
+  const particles = particleData.map((data, i) => {
     return (
       <motion.div
         key={i}
-        className={`absolute rounded-full bg-gradient-to-r ${color} backdrop-blur-lg`}
-        style={{ width: size, height: size, left: `${x}%`, top: `${y}%` }}
+        className={`absolute rounded-full bg-gradient-to-r ${data.color} backdrop-blur-lg`}
+        style={{ width: data.size, height: data.size, left: `${data.x}%`, top: `${data.y}%` }}
         animate={{
           opacity: [0, 0.4, 0.2, 0.5, 0],
           scale: [0.6, 1.3, 1, 1.2, 0.8],
-          x: [0, Math.random() * 20 - 10, 0],
-          y: [0, Math.random() * 20 - 10, 0]
+          x: data.animX,
+          y: data.animY
         }}
-        transition={{ delay, duration, ease: 'easeInOut', repeat: Infinity, repeatType: 'reverse' }}
+        transition={{
+          delay: data.delay,
+          duration: data.duration,
+          ease: 'easeInOut',
+          repeat: Infinity,
+          repeatType: 'reverse'
+        }}
       />
     )
   })

@@ -24,7 +24,10 @@ export default function SpectatorOverlay({
 
     // Animate pulsing effect as time counts down
     useEffect(() => {
-        if (!timeLeft || timeLeft <= 0) return
+        if (!timeLeft || timeLeft <= 0) {
+            setPulseIntensity(0);
+            return;
+        }
         setPulseIntensity(Math.max(0, 1 - (timeLeft / 30)))
     }, [timeLeft])
 

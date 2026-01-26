@@ -39,7 +39,7 @@ export class GameError extends Error {
     constructor(
         public code: GameErrorCode,
         public message: string,
-        public details?: any
+        public details?: Record<string, unknown>
     ) {
         super(message);
         this.name = 'GameError';
@@ -57,7 +57,7 @@ export class GameError extends Error {
 export function createGameError(
     code: GameErrorCode,
     message?: string,
-    details?: any
+    details?: Record<string, unknown>
 ): GameError {
     const defaultMessages: Record<GameErrorCode, string> = {
         [GameErrorCode.AUTH_REQUIRED]: 'Authentication required',

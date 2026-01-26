@@ -209,22 +209,22 @@ export default function LandingHero() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {[
               {
-                quote: '"The physics are incredibly realistic! I love the challenge of solo mode."',
+                quote: '&quot;The physics are incredibly realistic! I love the challenge of solo mode.&quot;',
                 author: '— CryptoGamer23',
                 avatar: '👤'
               },
               {
-                quote: '"Multiplayer is so competitive! The blockchain integration makes it fair and transparent."',
+                quote: '&quot;Multiplayer is so competitive! The blockchain integration makes it fair and transparent.&quot;',
                 author: '— BlockchainPro',
                 avatar: '👤'
               },
               {
-                quote: '"Best mobile gaming experience I\'ve had with a blockchain game!"',
+                quote: '&quot;Best mobile gaming experience I\'ve had with a blockchain game!&quot;',
                 author: '— MobileMaster',
                 avatar: '👤'
               },
               {
-                quote: '"The leaderboard system keeps me coming back for more competition!"',
+                quote: '&quot;The leaderboard system keeps me coming back for more competition!&quot;',
                 author: '— LeaderboardKing',
                 avatar: '👤'
               }

@@ -22,7 +22,7 @@ export class MoveValidator {
     /**
      * Validate move data structure and physics constraints
      */
-    public validate(moveData: any): ValidationResult {
+    public validate(moveData: MoveData): ValidationResult {
         if (!moveData) {
             return {
                 isValid: false,
@@ -64,7 +64,7 @@ export class MoveValidator {
      * Validate a 3D vector (force or point)
      */
     private validateVector(
-        vector: any,
+        vector: { x: number; y: number; z: number },
         name: string,
         maxMagnitude: number
     ): GameError | null {
