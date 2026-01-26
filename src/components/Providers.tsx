@@ -11,7 +11,7 @@ const queryClient = new QueryClient()
 
 const config = getDefaultConfig({
   appName: 'Agnej',
-  projectId: 'demo-project-id', // Replace with your WalletConnect project ID
+  projectId: process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || 'demo-project-id', // Use env var
   chains: [lineaSepolia, sepolia, mainnet],
   ssr: true,
 })
