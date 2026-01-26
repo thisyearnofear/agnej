@@ -61,7 +61,7 @@ export class BlockchainService {
   }) {
     console.log("Listening to contract events...");
 
-    this.contract.on("PlayerJoined", (gameId, player) => {
+    this.contract.on("PlayerJoined", (gameId: number | bigint, player: string) => {
       console.log(`Event: PlayerJoined game=${gameId} player=${player}`);
 
       const gId = Number(gameId);
@@ -75,15 +75,18 @@ export class BlockchainService {
       callbacks.onPlayerJoined(gId, player);
     });
 
-    this.contract.on("GameStarted", (gameId) => {
+    this.contract.on("GameStarted", (gameId: number | bigint) => {
       console.log(`Event: GameStarted game=${gameId}`);
       callbacks.onGameStarted(Number(gameId));
     });
 
-    this.contract.on("TurnChanged", (gameId, player, deadline) => {
-      console.log(`Event: TurnChanged game=${gameId} player=${player}`);
-      callbacks.onTurnChanged(Number(gameId), player, Number(deadline));
-    });
+    this.contract.on(
+      "TurnChanged",
+      (gameId: number | bigint, player: string, deadline: number | bigint) => {
+        console.log(`Event: TurnChanged game=${gameId} player=${player}`);
+        callbacks.onTurnChanged(Number(gameId), player, Number(deadline));
+      },
+    );
   }
 
   /**
