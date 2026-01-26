@@ -23,7 +23,7 @@ export default function LandingHero() {
 
   return (
     <ImmersiveBackground>
-      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-black text-white overflow-hidden">
+      <div className="min-h-screen text-white relative">
 
         <header className="flex justify-between items-center p-6 border-b border-white/10 relative z-10 animate-fadeIn">
           <Link href="/" className="flex items-center space-x-2 transition-transform hover:scale-105">
@@ -81,6 +81,9 @@ export default function LandingHero() {
 
           {/* Interactive Tower Section */}
           <div className="relative mb-20">
+            <div className="text-center text-gray-400 mb-6">
+              <p className="text-sm font-medium">👆 Hover & click blocks to experience the physics!</p>
+            </div>
             <div className="flex justify-center items-center min-h-[300px] md:min-h-[400px] relative">
               <InteractiveTower />
             </div>
@@ -263,22 +266,22 @@ export default function LandingHero() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {[
                 {
-                  quote: '&quot;The physics are incredibly realistic! I love the challenge of solo mode.&quot;',
+                  quote: 'The physics are incredibly realistic! I love the challenge of solo mode.',
                   author: '— CryptoGamer23',
                   avatar: '👤'
                 },
                 {
-                  quote: '&quot;Multiplayer is so competitive! The blockchain integration makes it fair and transparent.&quot;',
+                  quote: 'Multiplayer is so competitive! The blockchain integration makes it fair and transparent.',
                   author: '— BlockchainPro',
                   avatar: '👤'
                 },
                 {
-                  quote: '&quot;Best mobile gaming experience I\'ve had with a blockchain game!&quot;',
+                  quote: "Best mobile gaming experience I've had with a blockchain game!",
                   author: '— MobileMaster',
                   avatar: '👤'
                 },
                 {
-                  quote: '&quot;The leaderboard system keeps me coming back for more competition!&quot;',
+                  quote: 'The leaderboard system keeps me coming back for more competition!',
                   author: '— LeaderboardKing',
                   avatar: '👤'
                 }

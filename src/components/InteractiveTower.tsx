@@ -9,8 +9,8 @@ export default function InteractiveTower() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const animationRef = useRef<number | null>(null)
   const blocksRef = useRef<Array<{
-    x: number, y: number, width: number, height: number, 
-    color: string, depth: number, angle: number, 
+    x: number, y: number, width: number, height: number,
+    color: string, depth: number, angle: number,
     vx: number, vy: number, rotation: number
   }>>([]
   )
@@ -26,30 +26,30 @@ export default function InteractiveTower() {
   // Enhanced 3D tower with physics simulation preview
   useEffect(() => {
     if (!canvasRef.current) return
-    
+
     const canvas = canvasRef.current
     const ctx = canvas.getContext('2d')
     if (!ctx) return
-    
+
     let animationFrameId: number
     const blocks = blocksRef.current
-    
+
     // Automatic physics demonstration
     const physicsInterval = setInterval(() => {
       if (blocks.length > 0 && !isInteracting) {
         // Randomly select a block to animate
         const randomBlockIndex = Math.floor(Math.random() * blocks.length)
         const block = blocks[randomBlockIndex]
-        
+
         // Apply gentle physics impulse
         block.vx = (Math.random() - 0.5) * 2
         block.vy = -2
-        
+
         // Reset after animation
         setTimeout(() => initBlocks(), 1500)
       }
     }, 8000)
-    
+
     // Initialize blocks with 3D perspective
     const initBlocks = () => {
       blocksRef.current.length = 0
@@ -57,15 +57,19 @@ export default function InteractiveTower() {
       const blockHeight = 20
       const blockDepth = 15
       const layers = 12
-      
+
+      // Calculate total tower width to center it
+      const totalTowerWidth = blockWidth * 3
+      const startX = (canvas.width - totalTowerWidth) / 2
+
       for (let i = 0; i < layers; i++) {
         const isEvenLayer = i % 2 === 0
         const offsetX = isEvenLayer ? 0 : blockWidth / 2
         const perspectiveScale = 1 - (i * 0.02) // Simulate depth
-        
+
         for (let j = 0; j < 3; j++) {
           blocksRef.current.push({
-            x: offsetX + j * blockWidth,
+            x: startX + offsetX + (j * blockWidth),
             y: canvas.height - (i + 1) * blockHeight,
             width: blockWidth * perspectiveScale,
             height: blockHeight * perspectiveScale,
@@ -79,17 +83,17 @@ export default function InteractiveTower() {
         }
       }
     }
-    
+
     const drawBlocks = () => {
       ctx.clearRect(0, 0, canvas.width, canvas.height)
-      
-      // Draw background gradient
+
+      // Draw subtle background gradient
       const gradient = ctx.createLinearGradient(0, 0, canvas.width, canvas.height)
-      gradient.addColorStop(0, 'rgba(30, 41, 59, 0.8)')
-      gradient.addColorStop(1, 'rgba(17, 24, 39, 0.8)')
+      gradient.addColorStop(0, 'rgba(30, 41, 59, 0.3)')
+      gradient.addColorStop(1, 'rgba(17, 24, 39, 0.4)')
       ctx.fillStyle = gradient
       ctx.fillRect(0, 0, canvas.width, canvas.height)
-      
+
       // Apply physics simulation
       if (isInteracting) {
         blocks.forEach(block => {
@@ -98,7 +102,7 @@ export default function InteractiveTower() {
           block.x += block.vx
           block.y += block.vy
           block.rotation += block.vx * 0.01
-          
+
           // Bounce off edges
           if (block.x < 0 || block.x + block.width > canvas.width) {
             block.vx *= -0.8
@@ -109,33 +113,33 @@ export default function InteractiveTower() {
           }
         })
       }
-      
+
       // Sort blocks by y position for proper depth rendering
       const sortedBlocks = [...blocks].sort((a, b) => a.y - b.y)
-      
+
       // Add automatic wobble animation to all blocks
       const time = Date.now() * 0.001
-      
+
       sortedBlocks.forEach((block, index) => {
         // Add automatic wobble animation (always active)
         const autoWobble = Math.sin(time * 0.003 + index * 0.5) * 1.5
-        
+
         // Add additional wobble when interacting
         const interactionWobble = isInteracting ? Math.sin(time * 0.005 + index * 0.3) * 3 : 0
-        
+
         const wobbleAmount = autoWobble + interactionWobble
         const currentColor = hoveredBlock === index ? '#8B5CF6' : block.color
-        
+
         // Draw main block
         ctx.fillStyle = currentColor
         ctx.strokeStyle = hoveredBlock === index ? '#A78BFA' : '#374151'
         ctx.lineWidth = hoveredBlock === index ? 3 : 2
-        
+
         // Apply 3D perspective transform with physics rotation
         ctx.save()
         ctx.translate(block.x + wobbleAmount + block.width / 2, block.y + block.height / 2)
         ctx.rotate((block.angle + block.rotation) * Math.PI / 180)
-        
+
         // Draw block with rounded corners
         ctx.beginPath()
         ctx.roundRect(
@@ -147,7 +151,7 @@ export default function InteractiveTower() {
         )
         ctx.fill()
         ctx.stroke()
-        
+
         // Add 3D side effect
         ctx.fillStyle = hoveredBlock === index ? 'rgba(139, 92, 246, 0.3)' : 'rgba(79, 70, 229, 0.2)'
         ctx.beginPath()
@@ -157,16 +161,16 @@ export default function InteractiveTower() {
         ctx.lineTo(block.width / 2, block.height / 2)
         ctx.closePath()
         ctx.fill()
-        
+
         ctx.restore()
-        
+
         // Add shadow
         ctx.shadowColor = 'rgba(0, 0, 0, 0.3)'
         ctx.shadowBlur = 8
         ctx.shadowOffsetX = 2
         ctx.shadowOffsetY = 4
       })
-      
+
       // Add some floating particles for atmosphere
       if (Math.random() > 0.7) {
         ctx.fillStyle = 'rgba(147, 197, 253, 0.6)'
@@ -181,43 +185,60 @@ export default function InteractiveTower() {
         ctx.fill()
       }
     }
-    
+
     const animate = () => {
       drawBlocks()
       animationFrameId = requestAnimationFrame(animate)
     }
-    
+
     // Set canvas size
     canvas.width = canvas.offsetWidth
     canvas.height = canvas.offsetHeight
     initBlocksRef.current = initBlocks
     initBlocks()
     animate()
-    
+
     return () => {
       cancelAnimationFrame(animationFrameId)
       clearInterval(physicsInterval)
     }
   }, [hoveredBlock, isInteracting])
 
+  const getBlockAtPos = (x: number, y: number) => {
+    // Check blocks in reverse order (top to bottom) to hit the front-most first
+    for (let i = blocksRef.current.length - 1; i >= 0; i--) {
+      const block = blocksRef.current[i]
+      if (
+        x >= block.x &&
+        x <= block.x + block.width &&
+        y >= block.y &&
+        y <= block.y + block.height
+      ) {
+        return i
+      }
+    }
+    return null
+  }
+
   const handleClick = (e: React.MouseEvent) => {
     if (!canvasRef.current) return
-    
+
     const rect = canvasRef.current.getBoundingClientRect()
     const x = e.clientX - rect.left
     const y = e.clientY - rect.top
-    
-    // Find clicked block
-    const blockIndex = Math.floor((x / rect.width) * 36)
+
+    const blockIndex = getBlockAtPos(x, y)
+    if (blockIndex === null) return
+
     setHoveredBlock(blockIndex)
     setIsInteracting(true)
-    
+
     // Add physics impulse to clicked block
     if (blocksRef.current[blockIndex]) {
       blocksRef.current[blockIndex].vx = (Math.random() - 0.5) * 5
       blocksRef.current[blockIndex].vy = -5
     }
-    
+
     // Reset interaction after animation
     setTimeout(() => {
       setIsInteracting(false)
@@ -236,22 +257,13 @@ export default function InteractiveTower() {
           const rect = canvasRef.current.getBoundingClientRect()
           const x = e.clientX - rect.left
           const y = e.clientY - rect.top
-          
-          const blockIndex = Math.floor((x / rect.width) * 36)
+
+          const blockIndex = getBlockAtPos(x, y)
           setHoveredBlock(blockIndex)
         }}
         onMouseLeave={() => setHoveredBlock(null)}
         onClick={handleClick}
       />
-      
-      {!isMobile && (
-        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-          <div className="text-center text-gray-400 animate-pulse">
-            <p className="mb-1">👆 Hover & click blocks!</p>
-            <p className="text-xs">Experience the physics</p>
-          </div>
-        </div>
-      )}
     </div>
   )
 }

@@ -5,18 +5,16 @@ import { motion, AnimatePresence } from 'framer-motion'
 
 interface PageTransitionProps {
   children: React.ReactNode
-  key?: string
   transitionType?: 'fade' | 'slide' | 'scale' | 'flip' | 'scan'
   duration?: number
 }
 
 export default function PageTransition({
   children,
-  key = 'page',
   transitionType = 'fade',
   duration = 0.3
 }: PageTransitionProps) {
-  
+
   const getVariants = () => {
     switch (transitionType) {
       case 'slide':
@@ -39,9 +37,9 @@ export default function PageTransition({
         }
       case 'scan':
         return {
-          initial: { opacity: 0, y: '100%', scale: 0.9 },
+          initial: { opacity: 0, y: 20, scale: 0.98 },
           animate: { opacity: 1, y: 0, scale: 1 },
-          exit: { opacity: 0, y: '-100%', scale: 1.1 }
+          exit: { opacity: 0, y: -20, scale: 1.02 }
         }
       default: // fade
         return {
@@ -51,17 +49,16 @@ export default function PageTransition({
         }
     }
   }
-  
+
   return (
     <AnimatePresence mode="wait">
       <motion.div
-        key={key}
         initial="initial"
         animate="animate"
         exit="exit"
         variants={getVariants()}
         transition={{ duration, ease: 'easeInOut' }}
-        className="w-full h-full"
+        className="w-full min-h-screen"
       >
         {children}
       </motion.div>

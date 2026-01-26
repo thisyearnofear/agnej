@@ -20,27 +20,23 @@
 }
 
 html {
-  /* Prevent scrolling and overscroll on mobile */
-  overflow: hidden;
-  height: 100%;
-  height: 100svh; /* Use small viewport height for better mobile support */
-  overscroll-behavior: none;
-  touch-action: manipulation; /* Prevent zoom on double-tap */
+  /* Dynamic viewport height for better mobile support */
+  min-height: 100svh;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
-  /* Prevent scrolling and overscroll on mobile */
+  min-height: 100svh;
+  -webkit-overflow-scrolling: touch;
+}
+
+.no-scroll {
   overflow: hidden;
+  height: 100vh;
   position: fixed;
   width: 100%;
-  height: 100%;
-  height: 100svh;
-  overscroll-behavior: none;
-  -webkit-overflow-scrolling: touch;
-  touch-action: manipulation;
 }
 
 /* Ensure game canvas doesn't allow scrolling */

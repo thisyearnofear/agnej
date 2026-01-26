@@ -21,8 +21,8 @@ export default function PlayPage() {
   }
 
   return (
-    <div 
-      className="h-full w-full bg-gradient-to-br from-slate-900 via-slate-800 to-black text-white flex flex-col overflow-hidden"
+    <div
+      className="h-full w-full bg-gradient-to-br from-slate-900 via-slate-800 to-black text-white flex flex-col overflow-hidden no-scroll"
       style={{
         height: '100svh', // Use small viewport height for mobile
         minHeight: '100svh'
