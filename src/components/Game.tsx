@@ -209,9 +209,13 @@ export default function Game({ settings, onExit }: GameProps) {
 
   // Logic functions
   const createTower = useCallback(() => {
+    console.log("[Game] createTower called");
     const sc = sceneRef.current;
     const e = engineRef.current;
-    if (!sc || !e.materials.block) return;
+    if (!sc || !e.materials.block) {
+      console.error("[Game] Cannot create tower - missing scene or materials");
+      return;
+    }
     const pc = getPhysicsConfig(settings.difficulty);
     const [bw, bh, bd] = TOWER_CONFIG.BLOCK_SIZE;
     const geom = new THREE.BoxGeometry(bw, bh, bd);
@@ -235,6 +239,7 @@ export default function Game({ settings, onExit }: GameProps) {
         blocksRef.current.push(b);
       }
     }
+    console.log("[Game] Tower created with", blocksRef.current.length, "blocks");
   }, [settings.gameMode, settings.difficulty]);
 
   const renderFrame = useCallback(
@@ -397,13 +402,18 @@ export default function Game({ settings, onExit }: GameProps) {
   }, [gameState, isCurrentPlayer, isSpectator, settings.gameMode, socket]);
 
   const initScene = useCallback(() => {
+    console.log("[Game] initScene called");
     const e = engineRef.current;
     e.interaction.mousePos = new THREE.Vector3();
     e.interaction.offset = new THREE.Vector3();
     e.lastPhysicsUpdate = Date.now();
     blocksRef.current = [];
     const container = containerRef.current;
-    if (!container) return () => {};
+    if (!container) {
+      console.error("[Game] No container ref!");
+      return () => {};
+    }
+    console.log("[Game] Container found, creating renderer...");
     const r = container.getBoundingClientRect();
     e.renderer = new THREE.WebGLRenderer({ antialias: true });
     e.renderer.setSize(
@@ -489,7 +499,9 @@ export default function Game({ settings, onExit }: GameProps) {
     table.position.y = WORLD_CONFIG.TABLE_Y;
     table.receiveShadow = true;
     s.add(table);
+    console.log("[Game] Creating tower...");
     createTower();
+    console.log("[Game] Tower created, setting up interaction plane...");
     e.interaction.plane = new THREE.Mesh(
       new THREE.PlaneGeometry(...WORLD_CONFIG.DRAG_PLANE_SIZE),
       new THREE.MeshBasicMaterial({ visible: false }),
@@ -497,6 +509,7 @@ export default function Game({ settings, onExit }: GameProps) {
     e.interaction.plane.rotation.x = Math.PI / -2;
     s.add(e.interaction.plane);
 
+    console.log("[Game] initScene complete");
     return initEventHandling();
   }, [
     settings.gameMode,
@@ -554,14 +567,27 @@ export default function Game({ settings, onExit }: GameProps) {
     let eventCleanup: (() => void) | undefined;
     const initAll = async () => {
       try {
-        if (!window.THREE) await loadScript(ASSETS.THREE_JS);
-        if (!window.Stats) await loadScript(ASSETS.STATS_JS);
-        if (!window.Physijs) await loadScript(ASSETS.PHYSI_JS);
+        console.log("[Game] Starting initialization...");
+        if (!window.THREE) {
+          console.log("[Game] Loading THREE.js...");
+          await loadScript(ASSETS.THREE_JS);
+        }
+        if (!window.Stats) {
+          console.log("[Game] Loading Stats.js...");
+          await loadScript(ASSETS.STATS_JS);
+        }
+        if (!window.Physijs) {
+          console.log("[Game] Loading Physijs...");
+          await loadScript(ASSETS.PHYSI_JS);
+        }
         if (window.Physijs) {
           window.Physijs.scripts.worker = ASSETS.PHYSI_WORKER;
           window.Physijs.scripts.ammo = ASSETS.AMMO_JS;
+          console.log("[Game] Physijs worker configured");
         }
+        console.log("[Game] Calling initScene...");
         eventCleanup = initScene();
+        console.log("[Game] initScene completed");
         const resize = () => {
           const e = engineRef.current;
           if (e.renderer && e.camera && containerRef.current) {
@@ -573,7 +599,7 @@ export default function Game({ settings, onExit }: GameProps) {
         };
         window.addEventListener("resize", resize);
       } catch (err) {
-        console.error("Init error:", err);
+        console.error("[Game] Init error:", err);
       }
     };
     void initAll();
