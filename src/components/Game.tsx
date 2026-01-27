@@ -11,7 +11,6 @@ import { useAccount } from "wagmi";
 import { GameSettingsConfig } from "./GameSettings";
 import { loadScript } from "./Game/physicsHelpers";
 import { 
-  getPhysicsConfig,
   TOWER_CONFIG,
   WORLD_CONFIG,
   CAMERA_CONFIG,
@@ -19,8 +18,10 @@ import {
   INTERACTION_CONFIG,
   TIMING_CONFIG,
   ASSETS,
-  GAME_MODES
+  GAME_MODES,
+  getPhysicsConfig
 } from "@/config";
+import { PhysicsEngine, type Vector3 } from "@/lib/physicsEngine";
 
 // External lib declarations
 declare global {

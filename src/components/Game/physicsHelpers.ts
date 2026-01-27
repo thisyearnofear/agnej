@@ -1,3 +1,14 @@
+/**
+ * Physics Helpers
+ * 
+ * This file is kept for backward compatibility.
+ * New code should import directly from '@/lib/physicsEngine' or '@/config'.
+ * 
+ * Following Core Principles:
+ * - AGGRESSIVE CONSOLIDATION: This file will be removed in a future cleanup
+ * - DRY: All physics config now comes from centralized config
+ */
+
 import { 
   type PhysicsConfig, 
   PHYSICS_CONFIGS, 
@@ -17,6 +28,7 @@ export const getPhysicsConfig = getConfig
 
 /**
  * Load a script dynamically
+ * @deprecated Will be moved to PhysicsEngine class
  */
 export const loadScript = (src: string): Promise<void> => {
     return new Promise((resolve, reject) => {
@@ -27,3 +39,15 @@ export const loadScript = (src: string): Promise<void> => {
         document.head.appendChild(script)
     })
 }
+
+// Re-export PhysicsEngine for new code
+export { PhysicsEngine, createPhysicsEngine } from '@/lib/physicsEngine'
+export type { 
+  Vector3, 
+  BlockData, 
+  PhysicsState, 
+  RaycastHit,
+  PhysicsEngineConfig,
+  DragState,
+  PhysicsEventCallback 
+} from '@/lib/physicsEngine'
