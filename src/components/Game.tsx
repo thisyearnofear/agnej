@@ -88,6 +88,8 @@ export default function Game({ settings, onExit }: GameProps) {
   } | null>(null);
   const [showHelpers, setShowHelpers] = useState(settings.showHelpers);
   const [now, setNow] = useState(0);
+  // Local timer for SOLO_COMPETITOR mode (30 second time-attack)
+  const [soloCompetitorTimeLeft, setSoloCompetitorTimeLeft] = useState(30);
 
   // Derived State
   const gameState: GameState = useMemo(() => {
@@ -120,9 +122,9 @@ export default function Game({ settings, onExit }: GameProps) {
       settings.gameMode === "MULTIPLAYER"
         ? serverTimeLeft
         : settings.gameMode === "SOLO_COMPETITOR"
-          ? undefined
+          ? soloCompetitorTimeLeft
           : 30,
-    [settings.gameMode, serverTimeLeft],
+    [settings.gameMode, serverTimeLeft, soloCompetitorTimeLeft],
   );
   const userAddress = address?.toLowerCase();
   const isCurrentPlayer = useMemo(
@@ -497,6 +499,7 @@ export default function Game({ settings, onExit }: GameProps) {
     setFallenCount(0);
     setScore(0);
     setGameOver(false);
+    setSoloCompetitorTimeLeft(30); // Reset timer for SOLO_COMPETITOR
     scoredBlocksRef.current.clear();
     if (settings.gameMode.startsWith("SOLO")) sc.simulate();
   }, [settings.gameMode, createTower]);
@@ -515,6 +518,24 @@ export default function Game({ settings, onExit }: GameProps) {
     const itv = setInterval(() => setNow(Date.now()), 500);
     return () => clearInterval(itv);
   }, []);
+
+  // SOLO_COMPETITOR: 30 second countdown timer
+  useEffect(() => {
+    if (settings.gameMode !== "SOLO_COMPETITOR" || gameOver) return;
+    
+    const timer = setInterval(() => {
+      setSoloCompetitorTimeLeft((prev) => {
+        if (prev <= 1) {
+          // Time's up - trigger game over
+          setGameOver(true);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [settings.gameMode, gameOver]);
 
   // Main Init Effect
   useEffect(() => {
