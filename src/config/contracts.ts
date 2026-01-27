@@ -12,7 +12,7 @@ export const CONTRACTS = {
   
   /** Leaderboard contract - handles score submission and rankings */
   LEADERBOARD: {
-    address: '0x3127Ebc72F9760728cc2032DC28Ed7D2250bC9cF' as const,
+    address: '0x9E35aB6885bED1E34ea531d39CAe377815Ab7Fb9' as const,
     abi: 'LeaderboardABI' as const,
   },
 } as const

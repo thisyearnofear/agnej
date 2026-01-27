@@ -9,24 +9,14 @@ export interface ScoreEntry {
     player: string
     score: bigint
     timestamp: bigint
-    isVerified?: boolean
 }
 
-export function useLeaderboard(difficulty: 'EASY' | 'MEDIUM' | 'HARD', verifiedOnly: boolean = false) {
+export function useLeaderboard(difficulty: 'EASY' | 'MEDIUM' | 'HARD') {
     const { address } = useAccount()
     const { writeContract, data: hash, isPending, error } = useWriteContract()
 
     const { isLoading: isConfirming, isSuccess: isConfirmed } =
         useWaitForTransactionReceipt({ hash })
-
-    // ============ Read Verification Status ============
-    const { data: isVerifiedData } = useReadContract({
-        address: LEADERBOARD.address,
-        abi: LeaderboardABI,
-        functionName: 'isVerified',
-        args: address ? [address] : undefined,
-        query: { enabled: !!address }
-    })
 
     // ============ Read Personal High Score ============
     const { data: highScoreData, refetch: refetchHighScore } = useReadContract({
@@ -42,7 +32,7 @@ export function useLeaderboard(difficulty: 'EASY' | 'MEDIUM' | 'HARD', verifiedO
         address: LEADERBOARD.address,
         abi: LeaderboardABI,
         functionName: 'getPlayerRank',
-        args: address ? [address, difficulty, verifiedOnly] : undefined,
+        args: address ? [address, difficulty] : undefined,
         query: { enabled: !!address }
     })
 
@@ -51,7 +41,7 @@ export function useLeaderboard(difficulty: 'EASY' | 'MEDIUM' | 'HARD', verifiedO
         address: LEADERBOARD.address,
         abi: LeaderboardABI,
         functionName: 'getTotalPlayers',
-        args: [difficulty, verifiedOnly]
+        args: [difficulty]
     })
 
     // ============ Read Top Scores ============
@@ -59,7 +49,7 @@ export function useLeaderboard(difficulty: 'EASY' | 'MEDIUM' | 'HARD', verifiedO
         address: LEADERBOARD.address,
         abi: LeaderboardABI,
         functionName: 'getTopScores',
-        args: [difficulty, BigInt(10), verifiedOnly]
+        args: [difficulty, BigInt(10)]
     })
 
     // ============ Auto-refetch on Confirmation ============
@@ -83,15 +73,6 @@ export function useLeaderboard(difficulty: 'EASY' | 'MEDIUM' | 'HARD', verifiedO
         })
     }
 
-    const verifyHuman = async () => {
-        if (!address) return
-        writeContract({
-            address: LEADERBOARD.address,
-            abi: LeaderboardABI,
-            functionName: 'verifyHuman'
-        })
-    }
-
     const refetchAll = () => {
         refetchHighScore()
         refetchRank()
@@ -101,7 +82,6 @@ export function useLeaderboard(difficulty: 'EASY' | 'MEDIUM' | 'HARD', verifiedO
 
     return {
         submitScore,
-        verifyHuman,
         refetchAll,
         highScore: highScoreData ? Number(highScoreData) : 0,
         rank: rankData ? Number(rankData) : 0,
@@ -109,10 +89,8 @@ export function useLeaderboard(difficulty: 'EASY' | 'MEDIUM' | 'HARD', verifiedO
         topScores: topScoresData ? (topScoresData as ScoreEntry[]).map(entry => ({
             player: entry.player,
             score: Number(entry.score),
-            timestamp: Number(entry.timestamp),
-            isVerified: entry.isVerified
+            timestamp: Number(entry.timestamp)
         })) : [],
-        isVerified: !!isVerifiedData,
         isPending,
         isConfirming,
         isConfirmed,

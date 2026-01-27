@@ -121,6 +121,18 @@ export class GameInstance extends EventEmitter {
           return false;
         }
 
+        // Contract-Server Synchronization: Enforce hasPlayerPaid check for non-practice games
+        if (!this.isPractice && !this.blockchain.hasPlayerPaid(this.id, playerAddress)) {
+          console.warn(
+            `[GameInstance] Player ${playerAddress} has not paid for game ${this.id}`,
+          );
+          this.emit("playerJoinFailed", {
+            reason: "NOT_PAID",
+            playerAddress,
+          });
+          return false;
+        }
+
         this.players.push(playerAddress);
         this.playerSockets.set(playerAddress, socketId);
         this.activePlayers.add(playerAddress);
@@ -483,6 +495,12 @@ export class GameInstance extends EventEmitter {
 
     // Physics Step (Fixed 60Hz from Manager)
     this.physics.step(dt);
+
+    // Turn Timeout Check - Enforce turn deadlines
+    if (this.turnManager.isTimeoutReached()) {
+      console.log(`[GameInstance] Turn timeout reached for ${this.turnManager.getCurrentPlayer()}`);
+      this.turnManager.endTurn();
+    }
 
     // Network Optimization: Broadcast at 20Hz
     this.timeSinceLastBroadcast += dt * 1000;

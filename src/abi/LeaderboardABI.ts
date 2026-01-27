@@ -12,44 +12,6 @@ export const LeaderboardABI = [
     },
     {
         "inputs": [
-            { "internalType": "bytes", "name": "signature", "type": "bytes" }
-        ],
-        "name": "verifyPoHSigned",
-        "outputs": [],
-        "stateMutability": "nonpayable",
-        "type": "function",
-        "description": "Verify user via signed PoH status from Linea PoH V2 API"
-    },
-    {
-        "inputs": [
-            { "internalType": "address", "name": "player", "type": "address" }
-        ],
-        "name": "verifyPoHOffchain",
-        "outputs": [],
-        "stateMutability": "nonpayable",
-        "type": "function",
-        "description": "Backend oracle marks a user as verified after offchain API check"
-    },
-    {
-        "inputs": [],
-        "name": "verifyHuman",
-        "outputs": [],
-        "stateMutability": "nonpayable",
-        "type": "function",
-        "description": "Legacy function - deprecated, use verifyPoHSigned instead"
-    },
-    {
-        "inputs": [
-            { "internalType": "address", "name": "_pohVerifier", "type": "address" }
-        ],
-        "name": "setPohVerifier",
-        "outputs": [],
-        "stateMutability": "nonpayable",
-        "type": "function",
-        "description": "Update the PoHVerifier contract address (owner only)"
-    },
-    {
-        "inputs": [
             { "internalType": "address", "name": "newOwner", "type": "address" }
         ],
         "name": "transferOwnership",
@@ -60,15 +22,6 @@ export const LeaderboardABI = [
     },
 
     // ============ Read Functions ============
-    {
-        "inputs": [
-            { "internalType": "address", "name": "player", "type": "address" }
-        ],
-        "name": "isVerified",
-        "outputs": [{ "internalType": "bool", "name": "", "type": "bool" }],
-        "stateMutability": "view",
-        "type": "function"
-    },
     {
         "inputs": [
             { "internalType": "address", "name": "player", "type": "address" },
@@ -82,8 +35,7 @@ export const LeaderboardABI = [
     {
         "inputs": [
             { "internalType": "string", "name": "difficulty", "type": "string" },
-            { "internalType": "uint256", "name": "count", "type": "uint256" },
-            { "internalType": "bool", "name": "verifiedOnly", "type": "bool" }
+            { "internalType": "uint256", "name": "count", "type": "uint256" }
         ],
         "name": "getTopScores",
         "outputs": [
@@ -91,8 +43,7 @@ export const LeaderboardABI = [
                 "components": [
                     { "internalType": "address", "name": "player", "type": "address" },
                     { "internalType": "uint256", "name": "score", "type": "uint256" },
-                    { "internalType": "uint256", "name": "timestamp", "type": "uint256" },
-                    { "internalType": "bool", "name": "isVerified", "type": "bool" }
+                    { "internalType": "uint256", "name": "timestamp", "type": "uint256" }
                 ],
                 "internalType": "struct Leaderboard.ScoreEntry[]",
                 "name": "",
@@ -105,8 +56,7 @@ export const LeaderboardABI = [
     {
         "inputs": [
             { "internalType": "address", "name": "player", "type": "address" },
-            { "internalType": "string", "name": "difficulty", "type": "string" },
-            { "internalType": "bool", "name": "verifiedOnly", "type": "bool" }
+            { "internalType": "string", "name": "difficulty", "type": "string" }
         ],
         "name": "getPlayerRank",
         "outputs": [{ "internalType": "uint256", "name": "rank", "type": "uint256" }],
@@ -115,8 +65,7 @@ export const LeaderboardABI = [
     },
     {
         "inputs": [
-            { "internalType": "string", "name": "difficulty", "type": "string" },
-            { "internalType": "bool", "name": "verifiedOnly", "type": "bool" }
+            { "internalType": "string", "name": "difficulty", "type": "string" }
         ],
         "name": "getTotalPlayers",
         "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }],
@@ -131,6 +80,40 @@ export const LeaderboardABI = [
         "outputs": [{ "internalType": "address[]", "name": "", "type": "address[]" }],
         "stateMutability": "view",
         "type": "function"
+    },
+    {
+        "inputs": [
+            { "internalType": "address", "name": "player", "type": "address" },
+            { "internalType": "string", "name": "difficulty", "type": "string" }
+        ],
+        "name": "getPlayerStats",
+        "outputs": [
+            {
+                "components": [
+                    { "internalType": "uint256", "name": "highScore", "type": "uint256" },
+                    { "internalType": "uint256", "name": "rank", "type": "uint256" },
+                    { "internalType": "uint256", "name": "totalPlayers", "type": "uint256" },
+                    { "internalType": "uint256", "name": "lastSubmission", "type": "uint256" }
+                ],
+                "internalType": "struct Leaderboard.PlayerStats",
+                "name": "",
+                "type": "tuple"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function",
+        "description": "Get all player stats in a single call (optimized for frontend)"
+    },
+    {
+        "inputs": [
+            { "internalType": "string", "name": "difficulty", "type": "string" },
+            { "internalType": "address", "name": "player", "type": "address" }
+        ],
+        "name": "lastSubmissionTime",
+        "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }],
+        "stateMutability": "view",
+        "type": "function",
+        "description": "Get last submission timestamp for a player"
     },
 
     // ============ Events ============
@@ -155,13 +138,4 @@ export const LeaderboardABI = [
         "name": "NewHighScore",
         "type": "event"
     },
-    {
-        "anonymous": false,
-        "inputs": [
-            { "indexed": true, "internalType": "address", "name": "player", "type": "address" },
-            { "indexed": false, "internalType": "uint256", "name": "timestamp", "type": "uint256" }
-        ],
-        "name": "PlayerVerified",
-        "type": "event"
-    }
 ] as const

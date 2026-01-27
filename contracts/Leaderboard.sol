@@ -3,17 +3,10 @@ pragma solidity ^0.8.19;
 
 /**
  * @title Leaderboard
- * @notice On-chain leaderboard for Agnej game with Linea PoH V2 verification
- * @dev Stores high scores with ranking support and human verification via Verax attestations
+ * @notice On-chain leaderboard for Agnej game
+ * @dev Stores high scores with ranking support
+ * @dev Optimized for gas efficiency and frontend integration
  */
-
-/**
- * @dev Interface for Linea's PoHVerifier contract
- * Verifies signatures from Linea's PoH V2 API
- */
-interface IPoHVerifier {
-    function verify(bytes calldata signature, address account) external returns (bool);
-}
 
 contract Leaderboard {
     // ============ Events ============
@@ -31,7 +24,6 @@ contract Leaderboard {
         uint256 score
     );
 
-    event PlayerVerified(address indexed player, uint256 timestamp);
 
     // ============ Structs ============
     
@@ -39,13 +31,22 @@ contract Leaderboard {
         address player;
         uint256 score;
         uint256 timestamp;
-        bool isVerified;
+    }
+
+    struct PlayerStats {
+        uint256 highScore;
+        uint256 rank;
+        uint256 totalPlayers;
+        uint256 lastSubmission;
     }
 
     // ============ State Variables ============
     
     // Difficulty -> Player -> High Score
     mapping(string => mapping(address => uint256)) public highScores;
+    
+    // Difficulty -> Player -> Last submission timestamp
+    mapping(string => mapping(address => uint256)) public lastSubmissionTime;
     
     // Difficulty -> List of all players who have scores
     mapping(string => address[]) private players;
@@ -56,10 +57,15 @@ contract Leaderboard {
     // Difficulty -> Player -> Has submitted at least once
     mapping(string => mapping(address => bool)) private hasSubmitted;
 
-    // PoH Verification (opt-in via Linea PoH V2)
-    mapping(address => bool) public isVerified;
-    IPoHVerifier public pohVerifier = IPoHVerifier(0xBf14cFAFD7B83f6de881ae6dc10796ddD7220831);
     address public owner;
+    
+    // Anti-cheat: Maximum possible score per difficulty
+    uint256 public constant MAX_SCORE_EASY = 50000;
+    uint256 public constant MAX_SCORE_MEDIUM = 50000;
+    uint256 public constant MAX_SCORE_HARD = 50000;
+    
+    // Rate limiting: Minimum time between submissions (prevents spam)
+    uint256 public constant MIN_SUBMISSION_INTERVAL = 10; // 10 seconds
 
     // ============ Constructor ============
     constructor() {
@@ -73,50 +79,6 @@ contract Leaderboard {
     }
 
     // ============ Public Functions ============
-
-    /**
-     * @notice Verify user via signed PoH status from Linea PoH V2 API
-     * @dev Uses the PohVerifier contract to validate signatures from Linea's signer API
-     * @param signature The signed PoH status from https://poh-signer-api.linea.build/poh/v2/{address}
-     */
-    function verifyPoHSigned(bytes calldata signature) external {
-        require(!isVerified[msg.sender], "Already verified");
-        require(pohVerifier.verify(signature, msg.sender), "Invalid PoH signature");
-        isVerified[msg.sender] = true;
-        emit PlayerVerified(msg.sender, block.timestamp);
-    }
-
-    /**
-     * @notice Backend oracle marks a user as verified after offchain API check
-     * @dev Only callable by owner (oracle service)
-     * @param player The address to verify
-     */
-    function verifyPoHOffchain(address player) external onlyOwner {
-        require(!isVerified[player], "Already verified");
-        isVerified[player] = true;
-        emit PlayerVerified(player, block.timestamp);
-    }
-
-    /**
-     * @notice Legacy verifyHuman function - deprecated, use verifyPoHSigned instead
-     * @dev Kept for backwards compatibility
-     */
-    function verifyHuman() external {
-        require(!isVerified[msg.sender], "Already verified");
-        // For MVP: allow self-verification
-        // In production: use verifyPoHSigned() with Linea PoH V2
-        isVerified[msg.sender] = true;
-        emit PlayerVerified(msg.sender, block.timestamp);
-    }
-
-    /**
-     * @notice Update the PoHVerifier contract address
-     * @dev Only callable by owner
-     */
-    function setPohVerifier(address _pohVerifier) external onlyOwner {
-        require(_pohVerifier != address(0), "Invalid address");
-        pohVerifier = IPoHVerifier(_pohVerifier);
-    }
 
     /**
      * @notice Transfer ownership
@@ -136,6 +98,17 @@ contract Leaderboard {
         require(bytes(difficulty).length > 0, "Invalid difficulty");
         require(score > 0, "Score must be greater than 0");
         
+        // Anti-cheat: Validate score is within reasonable bounds
+        uint256 maxScore = _getMaxScore(difficulty);
+        require(score <= maxScore, "Score exceeds maximum for difficulty");
+        
+        // Rate limiting: Prevent submission spam
+        uint256 lastSubmission = lastSubmissionTime[difficulty][msg.sender];
+        require(
+            block.timestamp >= lastSubmission + MIN_SUBMISSION_INTERVAL,
+            "Please wait before submitting again"
+        );
+        
         uint256 currentHighScore = highScores[difficulty][msg.sender];
         
         // Track player if first submission for this difficulty
@@ -145,6 +118,9 @@ contract Leaderboard {
             hasSubmitted[difficulty][msg.sender] = true;
         }
         
+        // Update last submission time
+        lastSubmissionTime[difficulty][msg.sender] = block.timestamp;
+        
         // Always emit the submission event for the global log
         emit ScoreSubmitted(msg.sender, difficulty, score, block.timestamp);
 
@@ -153,6 +129,19 @@ contract Leaderboard {
             highScores[difficulty][msg.sender] = score;
             emit NewHighScore(msg.sender, difficulty, score);
         }
+    }
+    
+    /**
+     * @notice Get max score for a difficulty level
+     * @param difficulty The difficulty string
+     * @return Maximum allowed score
+     */
+    function _getMaxScore(string memory difficulty) internal pure returns (uint256) {
+        bytes32 diffHash = keccak256(bytes(difficulty));
+        if (diffHash == keccak256("EASY")) return MAX_SCORE_EASY;
+        if (diffHash == keccak256("MEDIUM")) return MAX_SCORE_MEDIUM;
+        if (diffHash == keccak256("HARD")) return MAX_SCORE_HARD;
+        revert("Invalid difficulty");
     }
 
     /**
@@ -173,10 +162,9 @@ contract Leaderboard {
      * @notice Get top N scores for a difficulty level
      * @param difficulty The difficulty level
      * @param count Maximum number of scores to return
-     * @param verifiedOnly If true, only return verified players
      * @return Array of ScoreEntry structs, sorted highest to lowest
      */
-    function getTopScores(string memory difficulty, uint256 count, bool verifiedOnly) 
+    function getTopScores(string memory difficulty, uint256 count)
         external 
         view 
         returns (ScoreEntry[] memory) 
@@ -188,46 +176,33 @@ contract Leaderboard {
             return new ScoreEntry[](0);
         }
         
-        // Filter and create array
-        uint256 validCount = 0;
-        for (uint256 i = 0; i < totalPlayers; i++) {
-            if (!verifiedOnly || isVerified[allPlayers[i]]) {
-                validCount++;
-            }
-        }
-
-        if (validCount == 0) {
-            return new ScoreEntry[](0);
-        }
-
-        ScoreEntry[] memory allScores = new ScoreEntry[](validCount);
-        uint256 idx = 0;
+        // Cap count to prevent gas issues
+        if (count > 100) count = 100;
+        
+        // Create array with all players
+        ScoreEntry[] memory allScores = new ScoreEntry[](totalPlayers);
         for (uint256 i = 0; i < totalPlayers; i++) {
             address player = allPlayers[i];
-            if (!verifiedOnly || isVerified[player]) {
-                allScores[idx] = ScoreEntry({
-                    player: player,
-                    score: highScores[difficulty][player],
-                    timestamp: 0,
-                    isVerified: isVerified[player]
-                });
-                idx++;
-            }
+            allScores[i] = ScoreEntry({
+                player: player,
+                score: highScores[difficulty][player],
+                timestamp: lastSubmissionTime[difficulty][player]
+            });
         }
         
-        // Sort descending
-        for (uint256 i = 0; i < validCount; i++) {
-            for (uint256 j = i + 1; j < validCount; j++) {
-                if (allScores[j].score > allScores[i].score) {
-                    ScoreEntry memory temp = allScores[i];
-                    allScores[i] = allScores[j];
-                    allScores[j] = temp;
-                }
+        // Optimized insertion sort (better for small-medium arrays)
+        for (uint256 i = 1; i < totalPlayers; i++) {
+            ScoreEntry memory key = allScores[i];
+            uint256 j = i;
+            while (j > 0 && allScores[j - 1].score < key.score) {
+                allScores[j] = allScores[j - 1];
+                j--;
             }
+            allScores[j] = key;
         }
         
         // Return top N
-        uint256 returnCount = count < validCount ? count : validCount;
+        uint256 returnCount = count < totalPlayers ? count : totalPlayers;
         ScoreEntry[] memory topScores = new ScoreEntry[](returnCount);
         for (uint256 i = 0; i < returnCount; i++) {
             topScores[i] = allScores[i];
@@ -240,10 +215,9 @@ contract Leaderboard {
      * @notice Get a player's rank for a specific difficulty
      * @param player The player's address
      * @param difficulty The difficulty level
-     * @param verifiedOnly If true, rank only among verified players
      * @return rank The player's rank (1 = best, 0 = unranked/never played)
      */
-    function getPlayerRank(address player, string memory difficulty, bool verifiedOnly) 
+    function getPlayerRank(address player, string memory difficulty)
         external 
         view 
         returns (uint256 rank) 
@@ -256,11 +230,6 @@ contract Leaderboard {
         if (playerScore == 0) {
             return 0;
         }
-
-        // If filtering by verified and player isn't verified, return 0
-        if (verifiedOnly && !isVerified[player]) {
-            return 0;
-        }
         
         address[] memory allPlayers = players[difficulty];
         uint256 totalPlayers = allPlayers.length;
@@ -268,14 +237,8 @@ contract Leaderboard {
         rank = 1;
         for (uint256 i = 0; i < totalPlayers; i++) {
             address otherPlayer = allPlayers[i];
-            if (otherPlayer != player) {
-                // Skip if filtering by verified and other player isn't verified
-                if (verifiedOnly && !isVerified[otherPlayer]) {
-                    continue;
-                }
-                if (highScores[difficulty][otherPlayer] > playerScore) {
-                    rank++;
-                }
+            if (otherPlayer != player && highScores[difficulty][otherPlayer] > playerScore) {
+                rank++;
             }
         }
         
@@ -285,26 +248,14 @@ contract Leaderboard {
     /**
      * @notice Get total number of players for a difficulty
      * @param difficulty The difficulty level
-     * @param verifiedOnly If true, count only verified players
      * @return Total number of unique players who have submitted scores
      */
-    function getTotalPlayers(string memory difficulty, bool verifiedOnly) 
+    function getTotalPlayers(string memory difficulty) 
         external 
         view 
         returns (uint256) 
     {
-        if (!verifiedOnly) {
-            return players[difficulty].length;
-        }
-
-        uint256 count = 0;
-        address[] memory allPlayers = players[difficulty];
-        for (uint256 i = 0; i < allPlayers.length; i++) {
-            if (isVerified[allPlayers[i]]) {
-                count++;
-            }
-        }
-        return count;
+        return players[difficulty].length;
     }
 
     /**
@@ -318,5 +269,55 @@ contract Leaderboard {
         returns (address[] memory) 
     {
         return players[difficulty];
+    }
+    
+    /**
+     * @notice Get all player stats in a single call (gas efficient for frontend)
+     * @param player The player's address
+     * @param difficulty The difficulty level
+     * @return PlayerStats struct with all player data
+     */
+    function getPlayerStats(address player, string memory difficulty)
+        external
+        view
+        returns (PlayerStats memory)
+    {
+        return PlayerStats({
+            highScore: highScores[difficulty][player],
+            rank: _getPlayerRankInternal(player, difficulty),
+            totalPlayers: players[difficulty].length,
+            lastSubmission: lastSubmissionTime[difficulty][player]
+        });
+    }
+    
+    /**
+     * @notice Internal function to get player rank (reusable)
+     */
+    function _getPlayerRankInternal(address player, string memory difficulty)
+        internal
+        view
+        returns (uint256 rank)
+    {
+        if (!hasSubmitted[difficulty][player]) {
+            return 0;
+        }
+        
+        uint256 playerScore = highScores[difficulty][player];
+        if (playerScore == 0) {
+            return 0;
+        }
+        
+        address[] memory allPlayers = players[difficulty];
+        uint256 totalPlayers = allPlayers.length;
+        
+        rank = 1;
+        for (uint256 i = 0; i < totalPlayers; i++) {
+            address otherPlayer = allPlayers[i];
+            if (otherPlayer != player && highScores[difficulty][otherPlayer] > playerScore) {
+                rank++;
+            }
+        }
+        
+        return rank;
     }
 }
