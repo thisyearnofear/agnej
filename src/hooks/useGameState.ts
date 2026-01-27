@@ -118,7 +118,7 @@ export function useGameState(
   const [survivors, setSurvivorsState] = useState<Survivor[]>([]);
   
   // UI state
-  const [showRules, setShowRulesState] = useState(isSolo);
+  const [showRules, setShowRulesState] = useState(false);
   const [showHelpers, setShowHelpersState] = useState(settings.showHelpers);
   const [dragIndicator, setDragIndicatorState] = useState<DragIndicator | null>(null);
   
