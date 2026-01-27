@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useCallback, useMemo } from 'react'
 import Link from 'next/link'
 import { ConnectButton } from '@rainbow-me/rainbowkit'
 import Image from 'next/image'
@@ -11,14 +11,18 @@ export default function PlayPage() {
   const [gameSettings, setGameSettings] = useState<GameSettingsConfig | null>(null)
   const [gameKey, setGameKey] = useState(0) // Force re-render for reset
 
-  const handleStartGame = (settings: GameSettingsConfig) => {
+  const handleStartGame = useCallback((settings: GameSettingsConfig) => {
     setGameSettings(settings)
     setGameKey(0) // Reset game key
-  }
+  }, [])
 
-  const handleResetGame = () => {
+  const handleResetGame = useCallback(() => {
     setGameKey(prev => prev + 1) // Force re-render to reset the game
-  }
+  }, [])
+
+  const handleExit = useCallback(() => {
+    setGameSettings(null)
+  }, [])
 
   return (
     <div
@@ -52,7 +56,7 @@ export default function PlayPage() {
             key={gameKey}
             settings={gameSettings}
             onReset={handleResetGame}
-            onExit={() => setGameSettings(null)}
+            onExit={handleExit}
           />
         )}
       </main>

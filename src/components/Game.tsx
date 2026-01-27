@@ -246,9 +246,14 @@ export default function Game({ settings, onExit }: GameProps) {
     }
   }, [settings.gameMode, settings.difficulty]);
 
+  let frameCount = 0;
   const renderFrame = useCallback(
     function animate() {
       requestRef.current = requestAnimationFrame(animate);
+      frameCount++;
+      if (frameCount === 1) console.log("[Game] First render frame");
+      if (frameCount % 60 === 0) console.log("[Game] Render frame", frameCount);
+      
       const e = engineRef.current;
       const s = sceneRef.current;
       if (e.renderer && s && e.camera) {
@@ -262,9 +267,11 @@ export default function Game({ settings, onExit }: GameProps) {
           }
         }
       } else {
-        if (!e.renderer) console.log("[Game] Render: no renderer");
-        if (!s) console.log("[Game] Render: no scene");
-        if (!e.camera) console.log("[Game] Render: no camera");
+        if (frameCount === 1) {
+          if (!e.renderer) console.log("[Game] Render: no renderer");
+          if (!s) console.log("[Game] Render: no scene");
+          if (!e.camera) console.log("[Game] Render: no camera");
+        }
       }
     },
     [settings.gameMode],
@@ -433,6 +440,7 @@ export default function Game({ settings, onExit }: GameProps) {
     e.renderer.shadowMap.enabled = true;
     container.innerHTML = "";
     container.appendChild(e.renderer.domElement);
+    console.log("[Game] Canvas appended:", e.renderer.domElement.tagName, "Size:", e.renderer.domElement.width, "x", e.renderer.domElement.height);
 
     const s = new Physijs.Scene({ fixedTimeStep: 1 / 120 });
     sceneRef.current = s;
@@ -463,15 +471,19 @@ export default function Game({ settings, onExit }: GameProps) {
     if (settings.gameMode.startsWith("SOLO")) {
       console.log("[Game] Setting up SOLO mode worker check");
       const check = () => {
+        console.log("[Game] Worker check running, _worker:", !!s._worker);
         if (s._worker) {
           console.log("[Game] Worker ready, starting simulation");
           s.simulate();
         } else {
-          console.log("[Game] Worker not ready yet...");
+          console.log("[Game] Worker not ready yet, retrying...");
           workerCheckTimeouts.current.add(setTimeout(check, 50));
         }
       };
-      workerCheckTimeouts.current.add(setTimeout(check, 100));
+      console.log("[Game] Scheduling first worker check in 100ms");
+      const timeoutId = setTimeout(check, 100);
+      console.log("[Game] Timeout ID:", timeoutId);
+      workerCheckTimeouts.current.add(timeoutId);
     }
     e.camera = new THREE.PerspectiveCamera(
       35,
@@ -481,6 +493,7 @@ export default function Game({ settings, onExit }: GameProps) {
     );
     e.camera.position.set(...CAMERA_CONFIG.POSITION);
     e.camera.lookAt(...CAMERA_CONFIG.LOOK_AT);
+    console.log("[Game] Camera position:", CAMERA_CONFIG.POSITION, "looking at:", CAMERA_CONFIG.LOOK_AT);
     s.add(new THREE.AmbientLight(LIGHTING_CONFIG.AMBIENT_COLOR));
     const dl = new THREE.DirectionalLight(LIGHTING_CONFIG.DIRECTIONAL_COLOR);
     dl.position.set(...LIGHTING_CONFIG.DIRECTIONAL_POSITION);
@@ -577,8 +590,13 @@ export default function Game({ settings, onExit }: GameProps) {
 
   // Main Init Effect
   useEffect(() => {
-    if (typeof window === "undefined" || initializedRef.current) return;
+    console.log("[Game] Main init effect running, initialized:", initializedRef.current, "gameMode:", settings.gameMode);
+    if (typeof window === "undefined" || initializedRef.current) {
+      console.log("[Game] Skipping init - window:", typeof window, "initialized:", initializedRef.current);
+      return;
+    }
     initializedRef.current = true;
+    console.log("[Game] Initialization starting...");
     let eventCleanup: (() => void) | undefined;
     const initAll = async () => {
       try {
@@ -621,8 +639,12 @@ export default function Game({ settings, onExit }: GameProps) {
     const timeouts = workerCheckTimeouts.current;
     const engine = engineRef.current;
     return () => {
+      console.log("[Game] Cleanup running, clearing", timeouts.size, "timeouts");
       timeouts.forEach(clearTimeout);
-      if (requestRef.current) cancelAnimationFrame(requestRef.current);
+      if (requestRef.current) {
+        console.log("[Game] Canceling animation frame:", requestRef.current);
+        cancelAnimationFrame(requestRef.current);
+      }
       const sc = sceneRef.current;
       if (sc) {
         if (sceneUpdateListenerRef.current)
@@ -636,6 +658,8 @@ export default function Game({ settings, onExit }: GameProps) {
         rd.dispose();
         rd.domElement?.parentNode?.removeChild(rd.domElement);
       }
+      console.log("[Game] Cleanup complete, resetting initialized ref");
+      initializedRef.current = false;
     };
   }, [initScene]);
 
