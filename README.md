@@ -55,12 +55,13 @@ See **[MULTIPLAYER_STABILIZATION.md](docs/MULTIPLAYER_STABILIZATION.md#-testing-
 
 ## 📚 Documentation
 
-Comprehensive documentation consolidated into 4 core guides:
+Comprehensive documentation consolidated into core guides:
 
-1. **[Deployment Guide](docs/DEPLOYMENT_GUIDE.md)** - Smart contract deployment, server setup, frontend configuration, and testing
-2. **[Game Mechanics](docs/GAME_MECHANICS.md)** - Game rules, tower structure, gameplay loops, and mobile features
-3. **[Architecture Overview](docs/ARCHITECTURE_OVERVIEW.md)** - System design, physics engine, smart contracts, and PoH integration setup
-4. **[Implementation Summary](docs/IMPLEMENTATION_SUMMARY.md)** - Component integration, deployment checklist, and code examples
+1. **[Architecture Overview](docs/ARCHITECTURE.md)** - System architecture, refactoring phases, design decisions ⭐ **UPDATED 2026-01**
+2. **[Deployment Guide](docs/DEPLOYMENT_GUIDE.md)** - Smart contract deployment, server setup, frontend configuration, and testing
+3. **[Game Mechanics](docs/GAME_MECHANICS.md)** - Game rules, tower structure, gameplay loops, and mobile features
+4. **[Architecture Overview (Legacy)](docs/ARCHITECTURE_OVERVIEW.md)** - Original system design (see new ARCHITECTURE.md)
+5. **[Implementation Summary](docs/IMPLEMENTATION_SUMMARY.md)** - Component integration, deployment checklist, and code examples
 
 ## ✨ Key Features
 
@@ -89,8 +90,9 @@ Comprehensive documentation consolidated into 4 core guides:
 
 | Layer | Technology |
 |-------|-----------|
-| **Frontend** | Next.js 15, React 19, Three.js, Physijs, TailwindCSS |
-| **Physics** | Physijs (client), Cannon.js (server) |
+| **Frontend** | Next.js 16, React 19, Three.js, Physijs, TailwindCSS |
+| **Physics** | Physijs (client), Cannon.js (server), PhysicsEngine class |
+| **State** | Custom hooks (useGameState), centralized config |
 | **Backend** | Express.js, Socket.io, Ethers.js |
 | **Blockchain** | Solidity 0.8.19, Linea Sepolia |
 | **Web3** | RainbowKit, wagmi, Viem |
@@ -108,20 +110,30 @@ Comprehensive documentation consolidated into 4 core guides:
 ```
 agnej/
 ├── src/
+│   ├── app/             # Next.js App Router
 │   ├── components/      # React components
-│   │   ├── Game/        # Modular game logic
+│   │   ├── Game/        # Game physics helpers
 │   │   ├── Game.tsx     # Main game component
-│   │   ├── GameUI.tsx   # HUD overlay
+│   │   ├── GameUI.tsx   # HUD overlay (simplified)
 │   │   └── GameSettings.tsx
 │   ├── hooks/           # Custom React hooks
+│   │   ├── useGameState.ts      # ⭐ Centralized state (NEW)
 │   │   ├── useGameContract.ts
 │   │   ├── useGameSocket.ts
-│   │   └── useLeaderboard.ts  # ⭐ NEW
+│   │   └── useLeaderboard.ts
+│   ├── lib/             # Utility libraries
+│   │   ├── physicsEngine.ts     # ⭐ Physics engine (NEW)
+│   │   └── shareUtils.ts
+│   ├── config/          # ⭐ Centralized config (NEW)
+│   │   ├── index.ts
+│   │   ├── contracts.ts
+│   │   ├── networks.ts
+│   │   └── game.ts
 │   └── abi/             # Smart contract ABIs
 ├── server/              # Express + Socket.io backend
 ├── contracts/           # Solidity smart contracts
 │   ├── HouseOfCards.sol
-│   └── Leaderboard.sol  # ⭐ NEW
+│   └── Leaderboard.sol
 ├── docs/                # Technical documentation
 └── public/
     └── js/              # Physijs workers
@@ -150,7 +162,25 @@ agnej/
 - ⚠️ Linea PoH V2 contract deployment
 - ⚠️ Spectator mode with betting
 
-### 📋 Planned (Phase 2)
+### ✅ Completed: Codebase Refactoring (Jan 2026)
+Following Core Principles: ENHANCEMENT FIRST, AGGRESSIVE CONSOLIDATION, DRY, CLEAN, MODULAR
+
+| Phase | Description | Impact |
+|-------|-------------|--------|
+| **Phase 3** | Configuration Centralization | 4 config files, -78 lines |
+| **Phase 1** | State Management (useGameState) | -67 lines, testable |
+| **Phase 2** | Physics Engine Module | +510 lines, reusable |
+| **Phase 4** | Component Consolidation | **-664 lines** |
+| **Total** | 18 files changed | **+1,372/-811 lines** |
+
+**Key Improvements:**
+- ✅ Centralized configuration (`src/config/`)
+- ✅ Unified game state (`useGameState` hook)
+- ✅ Modular physics engine (`PhysicsEngine` class)
+- ✅ Simplified GameUI interface (11 props vs 18)
+- ✅ Type-safe throughout
+
+### 📋 Planned (Phase 2 Features)
 - [ ] Deploy PoH-enabled contracts
 - [ ] Implement Linea PoH V2 verification flow
 - [ ] Dedicated leaderboard page (`/leaderboard`) with PoH filtering
@@ -158,7 +188,20 @@ agnej/
 - [ ] Multiplayer invite system & social sharing
 - [ ] Historical score trends
 
+### 🔮 Planned (Phase 5)
+- [ ] Server-side score validation (anti-cheat)
+- [ ] Move history replay for verification
+- [ ] Physics state serialization
+
 ## 🐛 Recent Fixes
+
+### Major Refactoring (Jan 2026)
+- ✅ **Configuration Centralization** - Single source of truth in `src/config/`
+- ✅ **State Management** - `useGameState` hook consolidates 15+ useState calls
+- ✅ **Physics Engine** - Modular `PhysicsEngine` class, testable, reusable
+- ✅ **Component Consolidation** - Simplified GameUI, -664 lines
+- ✅ **CORS Fix** - RPC endpoints configured to prevent blank page issues
+- ✅ **SOLO_COMPETITOR Timer** - Working 30-second countdown
 
 ### Physics & Lifecycle
 - ✅ Fixed game restart physics stall issue
