@@ -32,13 +32,14 @@ declare global {
   var Stats: any;
 }
 
-import GameUI, { type GameState } from "./GameUI";
+import GameUI from "./GameUI";
 import GameOver from "./MultiplayerGameOver";
 import SpectatorOverlay from "./SpectatorOverlay";
 
 import { useGameContract } from "../hooks/useGameContract";
 import { useGameSocket } from "../hooks/useGameSocket";
 import { useLeaderboard } from "../hooks/useLeaderboard";
+import { useGameState, type GameStatus } from "../hooks/useGameState";
 
 interface GameProps {
   settings: GameSettingsConfig;
@@ -79,37 +80,44 @@ export default function Game({ settings, onExit }: GameProps) {
     isConfirmed: isScoreConfirmed,
   } = useLeaderboard(settings.difficulty);
 
-  // Local Visual State
-  const [potSize, setPotSize] = useState(0);
-  const [fallenCount, setFallenCount] = useState(0);
-  const [score, setScore] = useState(0);
-  const [gameOver, setGameOver] = useState(false);
-  const [survivors, setSurvivors] = useState<
-    Array<{ address: string; isWinner: boolean }>
-  >([]);
-  const [towerCollapsed, setTowerCollapsed] = useState(false);
-  const [showRules, setShowRules] = useState(
-    settings.gameMode.startsWith("SOLO"),
-  );
-  const [dragIndicator, setDragIndicator] = useState<{
-    x: number;
-    y: number;
-    length: number;
-    angle: number;
-  } | null>(null);
-  const [showHelpers, setShowHelpers] = useState(settings.showHelpers);
-  const [now, setNow] = useState(0);
-  // Local timer for SOLO_COMPETITOR mode (time-attack)
-  const [soloCompetitorTimeLeft, setSoloCompetitorTimeLeft] = useState<number>(
-    GAME_MODES.SOLO_COMPETITOR.timerSeconds ?? 30
-  );
+  // Centralized Game State
+  const {
+    state: gameState,
+    actions: gameActions,
+    isPractice,
+  } = useGameState(settings, serverState, serverTimeLeft);
+
+  // Destructure state for convenience
+  const {
+    status: gameStatus,
+    gameOver,
+    towerCollapsed,
+    score,
+    fallenCount,
+    potSize,
+    survivors,
+    showRules,
+    showHelpers,
+    dragIndicator,
+    timeLeft,
+    now,
+  } = gameState;
+
+  // Destructure actions for convenience
+  const {
+    endGame,
+    resetGame,
+    incrementScore,
+    incrementFallen,
+    setPotSize,
+    setShowRules,
+    setShowHelpers,
+    setDragIndicator,
+    setSurvivors,
+    tick,
+  } = gameActions;
 
   // Derived State
-  const gameState: GameState = useMemo(() => {
-    if (settings.gameMode.startsWith("SOLO")) return "ACTIVE";
-    return (serverState?.status as GameState) || "WAITING";
-  }, [settings.gameMode, serverState?.status]);
-
   const players = useMemo(() => {
     if (settings.gameMode.startsWith("SOLO"))
       return [
@@ -130,15 +138,6 @@ export default function Game({ settings, onExit }: GameProps) {
     return serverState?.currentPlayer || undefined;
   }, [settings.gameMode, serverState?.currentPlayer]);
 
-  const timeLeft = useMemo(
-    () =>
-      settings.gameMode === "MULTIPLAYER"
-        ? serverTimeLeft
-        : settings.gameMode === "SOLO_COMPETITOR"
-          ? soloCompetitorTimeLeft
-          : 30,
-    [settings.gameMode, serverTimeLeft, soloCompetitorTimeLeft],
-  );
   const userAddress = address?.toLowerCase();
   const isCurrentPlayer = useMemo(
     () =>
@@ -264,7 +263,7 @@ export default function Game({ settings, onExit }: GameProps) {
         setShowRules(false);
         return;
       }
-      if (isSpectator || gameState !== "ACTIVE" || gameOverRef.current) return;
+      if (isSpectator || gameStatus !== "ACTIVE" || gameOverRef.current) return;
       if (settings.gameMode === "MULTIPLAYER" && !isCurrentPlayer) return;
       if (evt.type === "touchstart") evt.preventDefault();
 
@@ -427,10 +426,10 @@ export default function Game({ settings, onExit }: GameProps) {
             const scoringRadiusSq = WORLD_CONFIG.SCORING_RADIUS ** 2;
             if (distSq > scoringRadiusSq && !scoredBlocksRef.current.has(b.id)) {
               scoredBlocksRef.current.add(b.id);
-              setScore((v) => v + 1);
+              incrementScore(1);
             }
             if (b.userData.isLocked && b.position.y < WORLD_CONFIG.LOCKED_BLOCK_GAME_OVER_Y) {
-              setGameOver(true);
+              endGame(true); // Game over with tower collapsed
             }
           });
         }
@@ -512,10 +511,7 @@ export default function Game({ settings, onExit }: GameProps) {
     blocksRef.current = [];
     engineRef.current.interaction.selectedBlock = null;
     createTower();
-    setFallenCount(0);
-    setScore(0);
-    setGameOver(false);
-    setSoloCompetitorTimeLeft(GAME_MODES.SOLO_COMPETITOR.timerSeconds ?? 30);
+    resetGame(); // Use centralized reset
     scoredBlocksRef.current.clear();
     if (settings.gameMode.startsWith("SOLO")) sc.simulate();
   }, [settings.gameMode, createTower]);
@@ -530,28 +526,24 @@ export default function Game({ settings, onExit }: GameProps) {
   }, []);
 
   useEffect(() => {
-    setNow(Date.now());
-    const itv = setInterval(() => setNow(Date.now()), 500);
+    tick();
+    const itv = setInterval(() => tick(), 500);
     return () => clearInterval(itv);
-  }, []);
+  }, [tick]);
 
-  // SOLO_COMPETITOR: 30 second countdown timer
+  // SOLO_COMPETITOR: countdown timer
   useEffect(() => {
-    if (settings.gameMode !== "SOLO_COMPETITOR" || gameOver) return;
+    if (settings.gameMode !== GAME_MODES.SOLO_COMPETITOR.id || gameOver) return;
     
     const timer = setInterval(() => {
-      setSoloCompetitorTimeLeft((prev) => {
-        if (prev <= 1) {
-          // Time's up - trigger game over
-          setGameOver(true);
-          return 0;
-        }
-        return prev - 1;
-      });
+      const reachedZero = gameActions.decrementTimer();
+      if (reachedZero) {
+        endGame(false); // Time's up - game over without collapse
+      }
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [settings.gameMode, gameOver]);
+  }, [settings.gameMode, gameOver, gameActions, endGame]);
 
   // Main Init Effect
   useEffect(() => {
@@ -633,7 +625,6 @@ export default function Game({ settings, onExit }: GameProps) {
   useEffect(() => {
     if (settings.gameMode !== "MULTIPLAYER" || !serverState) return;
     if (serverState.status === "COLLAPSED") {
-      setTowerCollapsed(true);
       const sl =
         serverState.activePlayers?.map((addr: string) => ({
           address: addr,
@@ -641,9 +632,9 @@ export default function Game({ settings, onExit }: GameProps) {
         })) || [];
       if (sl.length > 0) sl[0].isWinner = true;
       setSurvivors(sl);
-      setGameOver(true);
+      endGame(true); // Tower collapsed - this also sets towerCollapsed state
     } else if (serverState.status === "ENDED") {
-      setGameOver(true);
+      endGame(false); // Normal end
       const sl =
         serverState.activePlayers?.map((addr: string) => ({
           address: addr,
@@ -651,12 +642,12 @@ export default function Game({ settings, onExit }: GameProps) {
         })) || [];
       setSurvivors(sl);
     }
-  }, [serverState, settings.gameMode]);
+  }, [serverState, settings.gameMode, endGame, setSurvivors]);
 
   return (
     <div className="relative w-full h-full game-container">
       <GameUI
-        gameState={gameOver ? "ENDED" : gameState}
+        gameState={gameOver ? "ENDED" : gameStatus}
         potSize={potSize}
         timeLeft={timeLeft ?? 30}
         players={players}
@@ -670,7 +661,7 @@ export default function Game({ settings, onExit }: GameProps) {
         }
         difficulty={settings.difficulty}
         stake={settings.stake}
-        isPractice={settings.gameMode.startsWith("SOLO")}
+        isPractice={isPractice}
         score={score}
         highScore={highScore}
         gameMode={settings.gameMode}
@@ -682,7 +673,7 @@ export default function Game({ settings, onExit }: GameProps) {
           if (settings.gameMode.startsWith("SOLO")) resetTower();
           else {
             void contractReload();
-            setPotSize((p) => p + 1);
+            setPotSize((p: number) => p + 1);
           }
         }}
         onVote={(split) => alert(`Voted to ${split ? "Split" : "Continue"}`)}
