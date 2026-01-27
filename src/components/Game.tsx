@@ -141,10 +141,12 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
   // Visual Helpers State
   const [showHelpers, setShowHelpers] = React.useState(settings.showHelpers)
 
+  // SOLO_COMPETITOR timer state (configurable duration, defaults to 30 seconds)
+  const [soloTimeLeft, setSoloTimeLeft] = React.useState(settings.timerDuration || 30)
 
   // Multiplayer timer (from server) or solo timer
   const timeLeft = settings.gameMode === 'MULTIPLAYER' ? serverTimeLeft : (
-    settings.gameMode === 'SOLO_COMPETITOR' ? undefined : 30
+    settings.gameMode === 'SOLO_COMPETITOR' ? soloTimeLeft : 30
   )
 
   // Determine if this client is current player (using address, not socket ID)
@@ -202,8 +204,14 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
     // Timer is ONLY enabled for SOLO_COMPETITOR mode
     if (settings.gameMode === 'SOLO_COMPETITOR' && gameState === 'ACTIVE' && !gameOver && !gameWon && !showRules) {
       interval = setInterval(() => {
-        // Note: timeLeft is derived from server in multiplayer, set internally in solo
-        // This is managed in Game.tsx local state for SOLO_COMPETITOR
+        setSoloTimeLeft(prev => {
+          if (prev <= 1) {
+            // Time's up - trigger game over
+            setGameOver(true)
+            return 0
+          }
+          return prev - 1
+        })
       }, 1000)
     }
     return () => clearInterval(interval)
@@ -520,7 +528,10 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
             if (!gameOverRef.current && dist > 10 && !scoredBlocksRef.current.has(block.id)) {
               scoredBlocksRef.current.add(block.id)
               setScore(prev => prev + 1)
-              // Note: Timer is managed by server in multiplayer, client in solo modes
+              // Reset timer on successful block knock-off (SOLO_COMPETITOR mode)
+              if (settings.gameMode === 'SOLO_COMPETITOR') {
+                setSoloTimeLeft(settings.timerDuration || 30)
+              }
             }
 
             // Check Collapse:
@@ -750,6 +761,7 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
     gameOverRef.current = false
     setGameWon(false)
     scoredBlocksRef.current.clear()
+    setSoloTimeLeft(settings.timerDuration || 30) // Reset timer for SOLO_COMPETITOR
 
     if (settings.gameMode === 'SOLO_PRACTICE' || settings.gameMode === 'SOLO_COMPETITOR') {
       sc.simulate()
@@ -969,8 +981,9 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
 
   return (
     <div className="relative w-full h-full game-container">
-      {/* Game UI Overlay */}
-      <GameUI
+      {/* Game UI Overlay - positioned above canvas */}
+      <div className="absolute inset-0 z-10 pointer-events-none">
+        <GameUI
         state={{
           status: gameOver ? 'ENDED' : gameState,
           gameOver,
@@ -1022,6 +1035,7 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
         setShowRules={setShowRules}
         setShowHelpers={setShowHelpers}
       />
+      </div>
 
       {/* Game Over Overlay - Unified for all modes */}
       {gameOver && (
@@ -1113,21 +1127,16 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
         </div>
       )}
 
-      {/* Game Canvas Container */}
+      {/* Game Canvas Container - positioned absolutely behind UI */}
       <div 
         ref={containerRef} 
-        className="w-full h-full bg-gradient-to-br from-slate-900 via-slate-800 to-black overflow-hidden" 
+        className="absolute inset-0 bg-gradient-to-br from-slate-900 via-slate-800 to-black overflow-hidden" 
         style={{ 
           pointerEvents: 'auto',
           touchAction: 'none',
           WebkitUserSelect: 'none',
           userSelect: 'none',
-          // Ensure explicit height is set
-          minHeight: '100vh',
-          height: '100%',
-          // Force height calculation
-          maxHeight: '100vh',
-          position: 'relative'
+          zIndex: 0
         }}
       >
         {/* Canvas will be appended here by initScene */}

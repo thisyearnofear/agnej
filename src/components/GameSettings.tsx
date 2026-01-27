@@ -24,6 +24,9 @@ export interface GameSettingsConfig {
 
   // ENHANCEMENT: Add spectator mode to existing interface
   isSpectator?: boolean;
+  
+  // SOLO_COMPETITOR timer duration (in seconds)
+  timerDuration?: number;
 }
 
 interface GameSettingsProps {
@@ -47,6 +50,7 @@ export default function GameSettings({ onStart }: GameSettingsProps) {
   );
   const [stake, setStake] = useState(1);
   const [showHelpers, setShowHelpers] = useState(false);
+  const [timerDuration, setTimerDuration] = useState(30); // SOLO_COMPETITOR timer duration
   const [showLeaderboard, setShowLeaderboard] = useState(false);
   const [isHost, setIsHost] = useState(true);
   const [copied, setCopied] = useState(false);
@@ -151,6 +155,8 @@ export default function GameSettings({ onStart }: GameSettingsProps) {
       // ENHANCEMENT: Add spectator mode to existing settings
       isSpectator:
         gameMode === "MULTIPLAYER" && !isHost ? isSpectator : undefined,
+      // SOLO_COMPETITOR timer duration
+      timerDuration: gameMode === "SOLO_COMPETITOR" ? timerDuration : undefined,
     };
     onStart(settings);
   };
@@ -187,7 +193,7 @@ export default function GameSettings({ onStart }: GameSettingsProps) {
             desc: "Ranked time-attack challenge",
             icon: "🏆",
             features: [
-              "30 second timer",
+              "Timer resets on block knock-off",
               "Leaderboard ranking",
               "Top 2 layers locked",
             ],
@@ -516,6 +522,33 @@ export default function GameSettings({ onStart }: GameSettingsProps) {
           </button>
         </label>
       </div>
+
+      {/* SOLO_COMPETITOR Timer Duration */}
+      {gameMode === "SOLO_COMPETITOR" && (
+        <div>
+          <label className="block text-white font-semibold mb-2 text-sm">
+            Timer Duration: <span className="text-blue-400">{timerDuration}s</span>
+          </label>
+          <div className="flex gap-2">
+            {[15, 30, 60].map((duration) => (
+              <button
+                key={duration}
+                onClick={() => setTimerDuration(duration)}
+                className={`flex-1 py-2 rounded-lg font-semibold text-sm transition-all ${
+                  timerDuration === duration
+                    ? "bg-blue-600 text-white shadow-lg shadow-blue-900/20"
+                    : "bg-white/5 text-gray-400 hover:bg-white/10"
+                }`}
+              >
+                {duration}s
+              </button>
+            ))}
+          </div>
+          <p className="text-gray-500 text-xs mt-2">
+            Timer resets each time you successfully knock off a block
+          </p>
+        </div>
+      )}
     </div>
   );
 
@@ -645,6 +678,21 @@ export default function GameSettings({ onStart }: GameSettingsProps) {
               </div>
             </div>
           </div>
+
+          {/* SOLO_COMPETITOR Timer Status */}
+          {gameMode === "SOLO_COMPETITOR" && (
+            <div className="flex items-center gap-4 p-4 bg-blue-500/10 rounded-xl border border-blue-500/20">
+              <span className="text-2xl">⏱️</span>
+              <div>
+                <div className="font-semibold text-white">
+                  Timer: {timerDuration} seconds
+                </div>
+                <div className="text-sm text-gray-400">
+                  Resets on each successful block knock-off
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     );
