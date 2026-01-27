@@ -1,7 +1,8 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useAccount, useSignMessage } from 'wagmi'
+import { EXTERNAL_APIS } from '@/config'
 
-const POH_API_BASE = 'https://poh-api.linea.build'
+const { POH_API_BASE } = EXTERNAL_APIS
 const SUMSUB_SDK_URL = 'https://in.sumsub.com/websdk/p/uni_BKWTkQpZ2EqnGoY7'
 
 interface PoHVerificationState {

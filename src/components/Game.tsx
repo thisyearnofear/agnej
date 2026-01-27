@@ -9,7 +9,18 @@ import React, {
 } from "react";
 import { useAccount } from "wagmi";
 import { GameSettingsConfig } from "./GameSettings";
-import { loadScript, getPhysicsConfig } from "./Game/physicsHelpers";
+import { loadScript } from "./Game/physicsHelpers";
+import { 
+  getPhysicsConfig,
+  TOWER_CONFIG,
+  WORLD_CONFIG,
+  CAMERA_CONFIG,
+  LIGHTING_CONFIG,
+  INTERACTION_CONFIG,
+  TIMING_CONFIG,
+  ASSETS,
+  GAME_MODES
+} from "@/config";
 
 // External lib declarations
 declare global {
@@ -88,8 +99,10 @@ export default function Game({ settings, onExit }: GameProps) {
   } | null>(null);
   const [showHelpers, setShowHelpers] = useState(settings.showHelpers);
   const [now, setNow] = useState(0);
-  // Local timer for SOLO_COMPETITOR mode (30 second time-attack)
-  const [soloCompetitorTimeLeft, setSoloCompetitorTimeLeft] = useState(30);
+  // Local timer for SOLO_COMPETITOR mode (time-attack)
+  const [soloCompetitorTimeLeft, setSoloCompetitorTimeLeft] = useState<number>(
+    GAME_MODES.SOLO_COMPETITOR.timerSeconds ?? 30
+  );
 
   // Derived State
   const gameState: GameState = useMemo(() => {
@@ -199,18 +212,20 @@ export default function Game({ settings, onExit }: GameProps) {
     const e = engineRef.current;
     if (!sc || !e.materials.block) return;
     const pc = getPhysicsConfig(settings.difficulty);
-    const geom = new THREE.BoxGeometry(6, 1, 1.5);
-    for (let i = 0; i < 16; i++) {
-      const isLocked = settings.gameMode === "SOLO_COMPETITOR" && i >= 14;
+    const [bw, bh, bd] = TOWER_CONFIG.BLOCK_SIZE;
+    const geom = new THREE.BoxGeometry(bw, bh, bd);
+    for (let i = 0; i < TOWER_CONFIG.LAYERS; i++) {
+      const isLocked = settings.gameMode === GAME_MODES.SOLO_COMPETITOR.id && 
+                       TOWER_CONFIG.LOCKED_LAYERS.includes(i);
       const mat = isLocked ? e.materials.lockedBlock : e.materials.block;
-      for (let j = 0; j < 3; j++) {
+      for (let j = 0; j < TOWER_CONFIG.BLOCKS_PER_LAYER; j++) {
         const b = new Physijs.BoxMesh(geom, mat, pc.mass);
-        b.position.y = 0.5 + i;
+        b.position.y = TOWER_CONFIG.START_Y + i * TOWER_CONFIG.LAYER_HEIGHT;
         if (i % 2 === 0) {
-          b.rotation.y = Math.PI / 2.01;
-          b.position.x = 2 * j - 2;
+          b.rotation.y = TOWER_CONFIG.LAYER_ROTATION;
+          b.position.x = TOWER_CONFIG.BLOCK_SPACING * j - TOWER_CONFIG.BLOCK_SPACING;
         } else {
-          b.position.z = 2 * j - 2;
+          b.position.z = TOWER_CONFIG.BLOCK_SPACING * j - TOWER_CONFIG.BLOCK_SPACING;
         }
         b.receiveShadow = b.castShadow = true;
         b.setDamping(pc.damping, pc.damping);
@@ -269,7 +284,8 @@ export default function Game({ settings, onExit }: GameProps) {
       const hits = ray.intersectObjects(blocksRef.current);
       if (hits.length > 0) {
         const b = hits[0].object;
-        if (settings.gameMode === "SOLO_COMPETITOR" && b.userData.layer >= 14)
+        const isLockedLayer = GAME_MODES.SOLO_COMPETITOR.lockedLayers?.includes(b.userData.layer);
+        if (settings.gameMode === GAME_MODES.SOLO_COMPETITOR.id && isLockedLayer)
           return;
         e.interaction.selectedBlock = b;
         if (showHelpersRef.current && b.material) {
@@ -400,21 +416,20 @@ export default function Game({ settings, onExit }: GameProps) {
 
     const s = new Physijs.Scene({ fixedTimeStep: 1 / 120 });
     sceneRef.current = s;
-    s.setGravity(new THREE.Vector3(0, -30, 0));
+    s.setGravity(new THREE.Vector3(...WORLD_CONFIG.GRAVITY));
     const onUpdate = () => {
       e.lastPhysicsUpdate = Date.now();
       if (settings.gameMode.startsWith("SOLO") && !gameOverRef.current) {
         s.simulate();
         if (settings.gameMode === "SOLO_COMPETITOR") {
           blocksRef.current.forEach((b) => {
-            if (
-              b.position.x ** 2 + b.position.z ** 2 > 100 &&
-              !scoredBlocksRef.current.has(b.id)
-            ) {
+            const distSq = b.position.x ** 2 + b.position.z ** 2;
+            const scoringRadiusSq = WORLD_CONFIG.SCORING_RADIUS ** 2;
+            if (distSq > scoringRadiusSq && !scoredBlocksRef.current.has(b.id)) {
               scoredBlocksRef.current.add(b.id);
               setScore((v) => v + 1);
             }
-            if (b.userData.isLocked && b.position.y < 2) {
+            if (b.userData.isLocked && b.position.y < WORLD_CONFIG.LOCKED_BLOCK_GAME_OVER_Y) {
               setGameOver(true);
             }
           });
@@ -438,17 +453,17 @@ export default function Game({ settings, onExit }: GameProps) {
       1,
       1000,
     );
-    e.camera.position.set(25, 20, 25);
-    e.camera.lookAt(0, 7, 0);
-    s.add(new THREE.AmbientLight(0x444444));
-    const dl = new THREE.DirectionalLight(0xffffff);
-    dl.position.set(20, 30, -5);
+    e.camera.position.set(...CAMERA_CONFIG.POSITION);
+    e.camera.lookAt(...CAMERA_CONFIG.LOOK_AT);
+    s.add(new THREE.AmbientLight(LIGHTING_CONFIG.AMBIENT_COLOR));
+    const dl = new THREE.DirectionalLight(LIGHTING_CONFIG.DIRECTIONAL_COLOR);
+    dl.position.set(...LIGHTING_CONFIG.DIRECTIONAL_POSITION);
     dl.castShadow = true;
     s.add(dl);
     const loader = new THREE.TextureLoader();
     const pc = getPhysicsConfig(settings.difficulty);
-    const wt = loader.load("/images/wood.jpg");
-    const pt = loader.load("/images/plywood.jpg");
+    const wt = loader.load(ASSETS.WOOD_TEXTURE);
+    const pt = loader.load(ASSETS.PLYWOOD_TEXTURE);
     e.materials.table = Physijs.createMaterial(
       new THREE.MeshLambertMaterial({ map: wt }),
       pc.friction,
@@ -464,17 +479,18 @@ export default function Game({ settings, onExit }: GameProps) {
       pc.friction,
       pc.restitution,
     );
+    const [tw, th, td] = WORLD_CONFIG.TABLE_SIZE;
     const table = new Physijs.BoxMesh(
-      new THREE.BoxGeometry(50, 1, 50),
+      new THREE.BoxGeometry(tw, th, td),
       e.materials.table,
       0,
     );
-    table.position.y = -0.5;
+    table.position.y = WORLD_CONFIG.TABLE_Y;
     table.receiveShadow = true;
     s.add(table);
     createTower();
     e.interaction.plane = new THREE.Mesh(
-      new THREE.PlaneGeometry(150, 150),
+      new THREE.PlaneGeometry(...WORLD_CONFIG.DRAG_PLANE_SIZE),
       new THREE.MeshBasicMaterial({ visible: false }),
     );
     e.interaction.plane.rotation.x = Math.PI / -2;
@@ -499,7 +515,7 @@ export default function Game({ settings, onExit }: GameProps) {
     setFallenCount(0);
     setScore(0);
     setGameOver(false);
-    setSoloCompetitorTimeLeft(30); // Reset timer for SOLO_COMPETITOR
+    setSoloCompetitorTimeLeft(GAME_MODES.SOLO_COMPETITOR.timerSeconds ?? 30);
     scoredBlocksRef.current.clear();
     if (settings.gameMode.startsWith("SOLO")) sc.simulate();
   }, [settings.gameMode, createTower]);
@@ -544,12 +560,12 @@ export default function Game({ settings, onExit }: GameProps) {
     let eventCleanup: (() => void) | undefined;
     const initAll = async () => {
       try {
-        if (!window.THREE) await loadScript("/js/three.min.js");
-        if (!window.Stats) await loadScript("/js/stats.js");
-        if (!window.Physijs) await loadScript("/js/physi.js");
+        if (!window.THREE) await loadScript(ASSETS.THREE_JS);
+        if (!window.Stats) await loadScript(ASSETS.STATS_JS);
+        if (!window.Physijs) await loadScript(ASSETS.PHYSI_JS);
         if (window.Physijs) {
-          window.Physijs.scripts.worker = "/js/physijs_worker.js";
-          window.Physijs.scripts.ammo = "/js/ammo.js";
+          window.Physijs.scripts.worker = ASSETS.PHYSI_WORKER;
+          window.Physijs.scripts.ammo = ASSETS.AMMO_JS;
         }
         eventCleanup = initScene();
         const resize = () => {
@@ -646,7 +662,7 @@ export default function Game({ settings, onExit }: GameProps) {
         players={players}
         currentPlayerId={currentPlayerId}
         fallenCount={fallenCount}
-        totalBlocks={16 * 3}
+        totalBlocks={TOWER_CONFIG.TOTAL_BLOCKS}
         maxPlayers={
           settings.gameMode === "MULTIPLAYER"
             ? settings.playerCount

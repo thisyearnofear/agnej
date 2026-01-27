@@ -18,12 +18,14 @@ export function shareToTwitter(text: string, url?: string) {
   window.open(twitterUrl, '_blank', 'width=600,height=400')
 }
 
+import { EXTERNAL_APIS } from '@/config'
+
 /**
  * Share to Farcaster (via Warpcast)
  */
 export function shareToFarcaster(text: string, url?: string) {
   const farcasterText = encodeURIComponent(text + (url ? ` ${url}` : ''))
-  const farcasterUrl = `https://warpcast.com/~/compose?text=${farcasterText}`
+  const farcasterUrl = `${EXTERNAL_APIS.WARPCAST_SHARE}?text=${farcasterText}`
   window.open(farcasterUrl, '_blank', 'width=600,height=400')
 }
 

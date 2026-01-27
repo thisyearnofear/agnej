@@ -1,8 +1,9 @@
 import { useReadContract, useWriteContract, useAccount, useWaitForTransactionReceipt } from 'wagmi'
 import { LeaderboardABI } from '../abi/LeaderboardABI'
 import { useEffect } from 'react'
+import { CONTRACTS } from '@/config'
 
-const LEADERBOARD_ADDRESS = '0x3127Ebc72F9760728cc2032DC28Ed7D2250bC9cF'
+const { LEADERBOARD } = CONTRACTS;
 
 export interface ScoreEntry {
     player: string
@@ -20,7 +21,7 @@ export function useLeaderboard(difficulty: 'EASY' | 'MEDIUM' | 'HARD', verifiedO
 
     // ============ Read Verification Status ============
     const { data: isVerifiedData } = useReadContract({
-        address: LEADERBOARD_ADDRESS,
+        address: LEADERBOARD.address,
         abi: LeaderboardABI,
         functionName: 'isVerified',
         args: address ? [address] : undefined,
@@ -29,7 +30,7 @@ export function useLeaderboard(difficulty: 'EASY' | 'MEDIUM' | 'HARD', verifiedO
 
     // ============ Read Personal High Score ============
     const { data: highScoreData, refetch: refetchHighScore } = useReadContract({
-        address: LEADERBOARD_ADDRESS,
+        address: LEADERBOARD.address,
         abi: LeaderboardABI,
         functionName: 'getHighScore',
         args: address ? [address, difficulty] : undefined,
@@ -38,7 +39,7 @@ export function useLeaderboard(difficulty: 'EASY' | 'MEDIUM' | 'HARD', verifiedO
 
     // ============ Read Player Rank ============
     const { data: rankData, refetch: refetchRank } = useReadContract({
-        address: LEADERBOARD_ADDRESS,
+        address: LEADERBOARD.address,
         abi: LeaderboardABI,
         functionName: 'getPlayerRank',
         args: address ? [address, difficulty, verifiedOnly] : undefined,
@@ -47,7 +48,7 @@ export function useLeaderboard(difficulty: 'EASY' | 'MEDIUM' | 'HARD', verifiedO
 
     // ============ Read Total Players ============
     const { data: totalPlayersData, refetch: refetchTotalPlayers } = useReadContract({
-        address: LEADERBOARD_ADDRESS,
+        address: LEADERBOARD.address,
         abi: LeaderboardABI,
         functionName: 'getTotalPlayers',
         args: [difficulty, verifiedOnly]
@@ -55,7 +56,7 @@ export function useLeaderboard(difficulty: 'EASY' | 'MEDIUM' | 'HARD', verifiedO
 
     // ============ Read Top Scores ============
     const { data: topScoresData, refetch: refetchTopScores } = useReadContract({
-        address: LEADERBOARD_ADDRESS,
+        address: LEADERBOARD.address,
         abi: LeaderboardABI,
         functionName: 'getTopScores',
         args: [difficulty, BigInt(10), verifiedOnly]
@@ -75,7 +76,7 @@ export function useLeaderboard(difficulty: 'EASY' | 'MEDIUM' | 'HARD', verifiedO
     const submitScore = async (submitDifficulty: 'EASY' | 'MEDIUM' | 'HARD', score: number) => {
         if (!address) return
         writeContract({
-            address: LEADERBOARD_ADDRESS,
+            address: LEADERBOARD.address,
             abi: LeaderboardABI,
             functionName: 'submitScore',
             args: [submitDifficulty, BigInt(score)]
@@ -85,7 +86,7 @@ export function useLeaderboard(difficulty: 'EASY' | 'MEDIUM' | 'HARD', verifiedO
     const verifyHuman = async () => {
         if (!address) return
         writeContract({
-            address: LEADERBOARD_ADDRESS,
+            address: LEADERBOARD.address,
             abi: LeaderboardABI,
             functionName: 'verifyHuman'
         })
@@ -117,6 +118,6 @@ export function useLeaderboard(difficulty: 'EASY' | 'MEDIUM' | 'HARD', verifiedO
         isConfirmed,
         hash,
         error,
-        contractAddress: LEADERBOARD_ADDRESS
+        contractAddress: LEADERBOARD.address
     }
 }

@@ -1,9 +1,19 @@
-export interface PhysicsConfig {
-    friction: number
-    restitution: number
-    mass: number
-    damping: number
-}
+import { 
+  type PhysicsConfig, 
+  PHYSICS_CONFIGS, 
+  DEFAULT_PHYSICS_CONFIG,
+  getPhysicsConfig as getConfig 
+} from '@/config/game'
+
+// Re-export types and functions from centralized config
+export type { PhysicsConfig }
+export { PHYSICS_CONFIGS, DEFAULT_PHYSICS_CONFIG }
+
+/**
+ * Get physics configuration based on difficulty
+ * @deprecated Use getPhysicsConfig from '@/config/game' directly
+ */
+export const getPhysicsConfig = getConfig
 
 /**
  * Load a script dynamically
@@ -16,16 +26,4 @@ export const loadScript = (src: string): Promise<void> => {
         script.onerror = reject
         document.head.appendChild(script)
     })
-}
-
-/**
- * Get physics configuration based on difficulty
- */
-export const getPhysicsConfig = (difficulty: 'EASY' | 'MEDIUM' | 'HARD'): PhysicsConfig => {
-    switch (difficulty) {
-        case 'EASY': return { friction: 0.8, restitution: 0.3, mass: 0.5, damping: 0.05 }
-        case 'MEDIUM': return { friction: 0.5, restitution: 0.4, mass: 1.0, damping: 0.02 }
-        case 'HARD': return { friction: 0.2, restitution: 0.5, mass: 2.0, damping: 0.01 }
-        default: return { friction: 0.5, restitution: 0.4, mass: 1.0, damping: 0.02 }
-    }
 }

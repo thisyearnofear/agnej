@@ -6,8 +6,9 @@ import {
 } from "wagmi";
 import { HouseOfCardsABI } from "../abi/HouseOfCardsABI";
 import { parseUnits } from "viem";
+import { CONTRACTS, ZERO_ADDRESS } from "@/config";
 
-const CONTRACT_ADDRESS = "0x1DFd9003590E4A67594748Ecec18451e6cBDDD90";
+const { HOUSE_OF_CARDS } = CONTRACTS;
 
 export function useGameContract() {
   const { address } = useAccount();
@@ -18,14 +19,14 @@ export function useGameContract() {
 
   // Read Game ID
   const { data: gameId } = useReadContract({
-    address: CONTRACT_ADDRESS,
+    address: HOUSE_OF_CARDS.address,
     abi: HouseOfCardsABI,
     functionName: "currentGameId",
   });
 
   // Read Game State
   const { data: gameStateData, refetch: refetchGameState } = useReadContract({
-    address: CONTRACT_ADDRESS,
+    address: HOUSE_OF_CARDS.address,
     abi: HouseOfCardsABI,
     functionName: "games",
     args: gameId ? [gameId] : undefined,
@@ -36,12 +37,10 @@ export function useGameContract() {
   });
 
   // Actions
-  const joinGame = async (
-    referrer: string = "0x0000000000000000000000000000000000000000",
-  ) => {
+  const joinGame = async (referrer: string = ZERO_ADDRESS) => {
     // Note: In a real app, you'd need to Approve USDC first
     writeContract({
-      address: CONTRACT_ADDRESS,
+      address: HOUSE_OF_CARDS.address,
       abi: HouseOfCardsABI,
       functionName: "joinGame",
       args: [referrer as `0x${string}`],
@@ -51,7 +50,7 @@ export function useGameContract() {
 
   const reload = async () => {
     writeContract({
-      address: CONTRACT_ADDRESS,
+      address: HOUSE_OF_CARDS.address,
       abi: HouseOfCardsABI,
       functionName: "reload",
       value: parseUnits("0.001", 18), // 0.001 ETH
