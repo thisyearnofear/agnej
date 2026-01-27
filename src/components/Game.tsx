@@ -240,6 +240,10 @@ export default function Game({ settings, onExit }: GameProps) {
       }
     }
     console.log("[Game] Tower created with", blocksRef.current.length, "blocks");
+    if (blocksRef.current.length > 0) {
+      const firstBlock = blocksRef.current[0];
+      console.log("[Game] First block position:", firstBlock.position.x, firstBlock.position.y, firstBlock.position.z);
+    }
   }, [settings.gameMode, settings.difficulty]);
 
   const renderFrame = useCallback(
@@ -253,9 +257,14 @@ export default function Game({ settings, onExit }: GameProps) {
           const t = Date.now();
           if (t - e.lastPhysicsUpdate > 4000) {
             e.lastPhysicsUpdate = t;
+            console.log("[Game] Periodic physics simulation");
             s.simulate();
           }
         }
+      } else {
+        if (!e.renderer) console.log("[Game] Render: no renderer");
+        if (!s) console.log("[Game] Render: no scene");
+        if (!e.camera) console.log("[Game] Render: no camera");
       }
     },
     [settings.gameMode],
@@ -452,9 +461,15 @@ export default function Game({ settings, onExit }: GameProps) {
     requestRef.current = requestAnimationFrame(renderFrame);
 
     if (settings.gameMode.startsWith("SOLO")) {
+      console.log("[Game] Setting up SOLO mode worker check");
       const check = () => {
-        if (s._worker) s.simulate();
-        else workerCheckTimeouts.current.add(setTimeout(check, 50));
+        if (s._worker) {
+          console.log("[Game] Worker ready, starting simulation");
+          s.simulate();
+        } else {
+          console.log("[Game] Worker not ready yet...");
+          workerCheckTimeouts.current.add(setTimeout(check, 50));
+        }
       };
       workerCheckTimeouts.current.add(setTimeout(check, 100));
     }
