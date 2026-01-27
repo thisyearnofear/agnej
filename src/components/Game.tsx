@@ -86,6 +86,7 @@ export default function Game({ settings, onExit }: GameProps) {
     state: gameState,
     actions: gameActions,
     isPractice,
+    maxPlayers,
   } = useGameState(settings, serverState, serverTimeLeft);
 
   // Destructure state for convenience
@@ -648,24 +649,14 @@ export default function Game({ settings, onExit }: GameProps) {
   return (
     <div className="relative w-full h-full game-container">
       <GameUI
-        gameState={gameOver ? "ENDED" : gameStatus}
-        potSize={potSize}
-        timeLeft={timeLeft ?? 30}
+        state={gameState}
         players={players}
         currentPlayerId={currentPlayerId}
-        fallenCount={fallenCount}
-        totalBlocks={TOWER_CONFIG.TOTAL_BLOCKS}
-        maxPlayers={
-          settings.gameMode === "MULTIPLAYER"
-            ? settings.playerCount
-            : (settings.aiOpponentCount || 1) + 1
-        }
+        maxPlayers={maxPlayers}
         difficulty={settings.difficulty}
         stake={settings.stake}
-        isPractice={isPractice}
-        score={score}
-        highScore={highScore}
         gameMode={settings.gameMode}
+        highScore={highScore}
         onJoin={() => {
           if (settings.gameMode === "MULTIPLAYER") joinGame(isSpectatorMode);
           else contractJoin(referrer || undefined);
@@ -679,9 +670,7 @@ export default function Game({ settings, onExit }: GameProps) {
         }}
         onVote={(split) => alert(`Voted to ${split ? "Split" : "Continue"}`)}
         onExit={onExit}
-        showRules={showRules}
         setShowRules={setShowRules}
-        showHelpers={showHelpers}
         setShowHelpers={setShowHelpers}
       />
 
