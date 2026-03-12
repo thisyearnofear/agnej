@@ -22,13 +22,32 @@
     "wagmi": "^2.19.4"
   },
   "devDependencies": {
+    "@parity/hardhat-polkadot": "^0.2.7",
+    "@parity/resolc": "^1.0.0",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.0.3",
+    "hardhat": "^2.28.6",
     "tailwindcss": "^4",
     "typescript": "^5"
-  }
+  },
+  "description": "A physics-based game with smart contract integration and optional PoH-verified leaderboards. Play solo with no friction, or enable Proof of Humanity to compete fairly on verified leaderboards. Join multiplayer battles with minimal blockchain interaction for efficient gameplay and lower gas costs.",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/thisyearnofear/agnej.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/thisyearnofear/agnej/issues"
+  },
+  "homepage": "https://github.com/thisyearnofear/agnej#readme"
 }
