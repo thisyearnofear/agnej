@@ -1,4 +1,4 @@
-const { ethers } = require("hardhat");
+const { ethers, run } = require("hardhat");
 
 async function main() {
   const network = (await ethers.provider.getNetwork()).chainId;

@@ -35,18 +35,12 @@ const config: HardhatUserConfig = {
       url: process.env.POLKADOT_RPC_URL || "https://rpc.polkadot.io/testnet",
       accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
       chainId: 420420417,
-      polkadot: {
-        evmChainId: 420420417,
-      },
     },
     // Polkadot Hub MainNet with EVM
     polkadot: {
       url: process.env.POLKADOT_RPC_URL || "https://rpc.polkadot.io",
       accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
       chainId: 420420419,
-      polkadot: {
-        evmChainId: 420420419,
-      },
     },
   },
 };

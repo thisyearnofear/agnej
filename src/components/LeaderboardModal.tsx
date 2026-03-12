@@ -13,7 +13,7 @@ export default function LeaderboardModal({ onClose }: LeaderboardModalProps) {
     const [difficulty, setDifficulty] = useState<'EASY' | 'MEDIUM' | 'HARD'>('MEDIUM')
     const [verifiedOnly, setVerifiedOnly] = useState(false)
     const [isLoading, setIsLoading] = useState(true)
-    const { topScores, highScore, rank, totalPlayers, refetchAll } = useLeaderboard(difficulty, verifiedOnly)
+    const { topScores, highScore, rank, totalPlayers, refetchAll } = useLeaderboard(difficulty)
     const { address } = useAccount()
 
     React.useEffect(() => {
@@ -135,7 +135,7 @@ export default function LeaderboardModal({ onClose }: LeaderboardModalProps) {
                                         <AnimatedCounter value={entry.score} />
                                     </td>
                                     <td className="p-4 text-right">
-                                        {entry.isVerified && <span className="text-green-400 text-xs">✓ Verified</span>}
+                                        {/* Placeholder for future verified badge */}
                                     </td>
                                 </tr>
                             ))
