@@ -1,44 +1,106 @@
 import { ethers, type TransactionReceipt } from "ethers";
 import { HOUSE_OF_CARDS_ABI } from "../abi";
 
+/** Chain configuration for multi-chain support */
+interface ChainConfig {
+  rpcUrl: string;
+  privateKey?: string;
+  contractAddress: string;
+}
+
+/** Supported chains */
+export type ChainName = 'linea' | 'polkadot';
+
+const CHAIN_CONFIGS: Record<ChainName, ChainConfig> = {
+  linea: {
+    rpcUrl: process.env.LINEA_RPC_URL || "https://rpc.sepolia.linea.build",
+    privateKey: process.env.ORACLE_PRIVATE_KEY,
+    contractAddress: process.env.CONTRACT_ADDRESS || "0x1DFd9003590E4A67594748Ecec18451e6cBDDD90",
+  },
+  polkadot: {
+    rpcUrl: process.env.POLKADOT_RPC_URL || "https://rpc.polkadot.io/testnet",
+    privateKey: process.env.POLKADOT_ORACLE_PRIVATE_KEY,
+    contractAddress: process.env.POLKADOT_CONTRACT_ADDRESS || "0x0000000000000000000000000000000000000001",
+  },
+};
+
 export class BlockchainService {
-  private provider: ethers.JsonRpcProvider;
-  private wallet: ethers.Signer;
-  private contract: ethers.Contract;
+  private providers: Map<ChainName, ethers.JsonRpcProvider>;
+  private wallets: Map<ChainName, ethers.Signer>;
+  private contracts: Map<ChainName, ethers.Contract>;
+  private activeChain: ChainName;
 
   constructor() {
-    // RPC Configuration: Linea Sepolia (testnet) by default
-    const rpcUrl = process.env.RPC_URL || "https://rpc.sepolia.linea.build";
-    this.provider = new ethers.JsonRpcProvider(rpcUrl);
-    console.log(`[Blockchain] Using RPC: ${rpcUrl}`);
+    this.providers = new Map();
+    this.wallets = new Map();
+    this.contracts = new Map();
+    
+    // Default to Linea
+    this.activeChain = (process.env.ACTIVE_CHAIN as ChainName) || 'linea';
+    
+    // Initialize providers for all chains
+    this.initializeChain('linea');
+    this.initializeChain('polkadot');
+    
+    console.log(`[Blockchain] Initialized with active chain: ${this.activeChain}`);
+  }
 
-    // Oracle Private Key (required for transaction signing)
-    const privateKey = process.env.ORACLE_PRIVATE_KEY;
-    if (!privateKey) {
-      console.warn(
-        "[Blockchain] ORACLE_PRIVATE_KEY not set. Server will be read-only.",
-      );
-      // Random wallet for read-only mode
-      this.wallet = ethers.Wallet.createRandom(
-        this.provider,
-      ) as unknown as ethers.Signer;
+  private initializeChain(chainName: ChainName): void {
+    const config = CHAIN_CONFIGS[chainName];
+    
+    // Initialize provider
+    const provider = new ethers.JsonRpcProvider(config.rpcUrl);
+    this.providers.set(chainName, provider);
+    console.log(`[Blockchain] ${chainName}: RPC connected - ${config.rpcUrl}`);
+
+    // Initialize wallet (if private key available)
+    if (config.privateKey) {
+      const wallet = new ethers.Wallet(config.privateKey, provider);
+      this.wallets.set(chainName, wallet);
+      console.log(`[Blockchain] ${chainName}: Wallet initialized - ${wallet.address}`);
     } else {
-      this.wallet = new ethers.Wallet(privateKey, this.provider);
-      console.log(
-        `[Blockchain] Wallet initialized: ${new ethers.Wallet(privateKey).address}`,
-      );
+      console.warn(`[Blockchain] ${chainName}: No ORACLE_PRIVATE_KEY set. Read-only mode.`);
     }
 
-    // Contract Configuration
-    const contractAddress =
-      process.env.CONTRACT_ADDRESS ||
-      "0x1DFd9003590E4A67594748Ecec18451e6cBDDD90";
-    this.contract = new ethers.Contract(
-      contractAddress,
+    // Initialize contract
+    const contract = new ethers.Contract(
+      config.contractAddress,
       HOUSE_OF_CARDS_ABI,
-      this.wallet,
+      this.wallets.get(chainName) || provider,
     );
-    console.log(`[Blockchain] Contract loaded: ${contractAddress}`);
+    this.contracts.set(chainName, contract);
+    console.log(`[Blockchain] ${chainName}: Contract loaded - ${config.contractAddress}`);
+  }
+
+  /** Switch active chain */
+  public setActiveChain(chainName: ChainName): void {
+    this.activeChain = chainName;
+    console.log(`[Blockchain] Switched to chain: ${chainName}`);
+  }
+
+  /** Get current chain */
+  public getActiveChain(): ChainName {
+    return this.activeChain;
+  }
+
+  /** Get provider for specific chain */
+  public getProvider(chainName?: ChainName): ethers.JsonRpcProvider {
+    const chain = chainName || this.activeChain;
+    const provider = this.providers.get(chain);
+    if (!provider) {
+      throw new Error(`Provider not initialized for chain: ${chain}`);
+    }
+    return provider;
+  }
+
+  /** Get contract for specific chain */
+  public getContract(chainName?: ChainName): ethers.Contract {
+    const chain = chainName || this.activeChain;
+    const contract = this.contracts.get(chain);
+    if (!contract) {
+      throw new Error(`Contract not initialized for chain: ${chain}`);
+    }
+    return contract;
   }
 
   // Cache of players who have paid for specific games
@@ -46,6 +108,11 @@ export class BlockchainService {
   private paidPlayers: Map<number, Set<string>> = new Map();
 
   public hasPlayerPaid(gameId: number, address: string): boolean {
+    // Development mode: bypass payment verification if flag is set
+    if (process.env.DEVELOPMENT_ALLOW_FREE_GAMES === 'true') {
+      return true;
+    }
+
     // For MVP: If gameId is NOT in our cache, we might assume it's a new/local game?
     // But for strict Pay-to-Play, we only return true if we saw the event.
     // However, for PRACTICE mode games (handled by GameManager), we don't check this.
@@ -61,32 +128,37 @@ export class BlockchainService {
   }) {
     console.log("Listening to contract events...");
 
-    this.contract.on("PlayerJoined", (gameId: number | bigint, player: string) => {
-      console.log(`Event: PlayerJoined game=${gameId} player=${player}`);
+    // Listen on both chains
+    for (const [chainName, contract] of this.contracts) {
+      console.log(`[Blockchain] Setting up listeners for ${chainName}...`);
+      
+      contract.on("PlayerJoined", (gameId: number | bigint, player: string) => {
+        console.log(`Event [${chainName}]: PlayerJoined game=${gameId} player=${player}`);
 
-      const gId = Number(gameId);
-      const pAddr = player.toLowerCase();
+        const gId = Number(gameId);
+        const pAddr = player.toLowerCase();
 
-      if (!this.paidPlayers.has(gId)) {
-        this.paidPlayers.set(gId, new Set());
-      }
-      this.paidPlayers.get(gId)!.add(pAddr);
+        if (!this.paidPlayers.has(gId)) {
+          this.paidPlayers.set(gId, new Set());
+        }
+        this.paidPlayers.get(gId)!.add(pAddr);
 
-      callbacks.onPlayerJoined(gId, player);
-    });
+        callbacks.onPlayerJoined(gId, player);
+      });
 
-    this.contract.on("GameStarted", (gameId: number | bigint) => {
-      console.log(`Event: GameStarted game=${gameId}`);
-      callbacks.onGameStarted(Number(gameId));
-    });
+      contract.on("GameStarted", (gameId: number | bigint) => {
+        console.log(`Event [${chainName}]: GameStarted game=${gameId}`);
+        callbacks.onGameStarted(Number(gameId));
+      });
 
-    this.contract.on(
-      "TurnChanged",
-      (gameId: number | bigint, player: string, deadline: number | bigint) => {
-        console.log(`Event: TurnChanged game=${gameId} player=${player}`);
-        callbacks.onTurnChanged(Number(gameId), player, Number(deadline));
-      },
-    );
+      contract.on(
+        "TurnChanged",
+        (gameId: number | bigint, player: string, deadline: number | bigint) => {
+          console.log(`Event [${chainName}]: TurnChanged game=${gameId} player=${player}`);
+          callbacks.onTurnChanged(Number(gameId), player, Number(deadline));
+        },
+      );
+    }
   }
 
   /**
@@ -99,7 +171,7 @@ export class BlockchainService {
     maxRetries: number = 3,
   ): Promise<boolean> {
     return this.retryContractCall(
-      () => this.contract.reportCollapse(gameId),
+      () => this.getContract().reportCollapse(gameId),
       `report collapse for game ${gameId}`,
       maxRetries,
     );
@@ -113,7 +185,7 @@ export class BlockchainService {
     maxRetries: number = 3,
   ): Promise<boolean> {
     return this.retryContractCall(
-      () => this.contract.startGame(gameId),
+      () => this.getContract().startGame(gameId),
       `start game ${gameId}`,
       maxRetries,
     );
@@ -127,7 +199,7 @@ export class BlockchainService {
     maxRetries: number = 3,
   ): Promise<boolean> {
     return this.retryContractCall(
-      () => this.contract.completeTurn(gameId),
+      () => this.getContract().completeTurn(gameId),
       `complete turn for game ${gameId}`,
       maxRetries,
     );
@@ -141,7 +213,7 @@ export class BlockchainService {
     maxRetries: number = 3,
   ): Promise<boolean> {
     return this.retryContractCall(
-      () => this.contract.timeoutTurn(gameId),
+      () => this.getContract().timeoutTurn(gameId),
       `timeout turn for game ${gameId}`,
       maxRetries,
     );
@@ -157,7 +229,7 @@ export class BlockchainService {
     maxRetries: number = 3,
   ): Promise<boolean> {
     return this.retryContractCall(
-      () => this.contract.eliminatePlayer(gameId, playerAddress, reason),
+      () => this.getContract().eliminatePlayer(gameId, playerAddress, reason),
       `eliminate player ${playerAddress} from game ${gameId} (reason: ${reason})`,
       maxRetries,
     );

@@ -18,6 +18,7 @@ const config = getDefaultConfig({
     [SUPPORTED_CHAINS[0].id]: http(RPC_ENDPOINTS[SUPPORTED_CHAINS[0].id]),
     [SUPPORTED_CHAINS[1].id]: http(RPC_ENDPOINTS[SUPPORTED_CHAINS[1].id]),
     [SUPPORTED_CHAINS[2].id]: http(RPC_ENDPOINTS[SUPPORTED_CHAINS[2].id]),
+    [SUPPORTED_CHAINS[3].id]: http(RPC_ENDPOINTS[SUPPORTED_CHAINS[3].id]),
   },
   ssr: true,
 })
