@@ -1,19 +1,17 @@
 # Agnej Architecture Overview
 
-> **Last Updated:** 2026-01-27  
-> **Version:** 2.0 (Post-Refactor)
+> **Last Updated:** 2026-03-30  
+> **Version:** 3.0 (PL Genesis Hackathon)
 
 ## Executive Summary
 
-Following a comprehensive refactoring initiative based on Core Principles (ENHANCEMENT FIRST, AGGRESSIVE CONSOLIDATION, DRY, CLEAN, MODULAR, PERFORMANT, ORGANIZED), the Agnej codebase has been significantly improved:
+Following a comprehensive refactoring initiative based on Core Principles (ENHANCEMENT FIRST, AGGRESSIVE CONSOLIDATION, DRY, CLEAN, MODULAR, PERFORMANT, ORGANIZED), the Agnej codebase has been extended to support the **Protocol Labs / IPFS** persistence layer and **multi-chain infrastructure** (Linea, Flow EVM, Polkadot Hub) for the PL Genesis: Frontiers of Collaboration hackathon.
 
 | Metric | Before | After | Change |
 |--------|--------|-------|--------|
-| Total Files | ~45 | ~50 | +5 |
-| Lines of Code | ~8,500 | ~7,900 | -600 |
-| Configuration Files | 0 | 4 | +4 |
-| State Management | Scattered | Centralized | Improved |
-| Physics Engine | Inline | Modular | Improved |
+| Multi-Chain Support | 1 | 3 | +2 |
+| Persistence Layers | 1 (DB) | 2 (+IPFS) | +1 |
+| Wallet Support | Metamask | +Coinbase Smart Wallet | Improved |
 
 ---
 
@@ -26,19 +24,16 @@ Following a comprehensive refactoring initiative based on Core Principles (ENHAN
 │  │   Next.js   │  │   Wagmi     │  │   Socket.io Client      │  │
 │  │   (App)     │  │   (Web3)    │  │   (Real-time)           │  │
 │  └──────┬──────┘  └──────┬──────┘  └───────────┬─────────────┘  │
-│         └─────────────────┴─────────────────────┘                │
-│                              │                                   │
-│  ┌───────────────────────────┼──────────────────────────────┐   │
-│  │                    State Layer                            │   │
-│  │  ┌─────────────────┐  ┌─────────────────────────────┐    │   │
-│  │  │  useGameState   │  │  PhysicsEngine (Phase 2)    │    │   │
-│  │  │  (Phase 1)      │  │  ┌─────────┐  ┌──────────┐  │    │   │
-│  │  │                 │  │  │  THREE  │  │ Physijs  │  │    │   │
-│  │  │  • score        │  │  │Renderer │  │ Physics  │  │    │   │
-│  │  │  • gameOver     │  │  └─────────┘  └──────────┘  │    │   │
-│  │  │  • timeLeft     │  └─────────────────────────────┘    │   │
-│  │  │  • survivors    │                                       │   │
-│  │  └─────────────────┘                                       │   │
+│         │                │                     │                 │
+│         ▼                ▼                     ▼                 │
+│  ┌────────────────────────────────────────────────────────────┐   │
+│  │                    Persistence Layer                        │   │
+│  │  ┌─────────────────┐  ┌─────────────────────────────┐      │   │
+│  │  │      IPFS       │  │      Blockchain (EVM)       │      │   │
+│  │  │ (Protocol Labs) │  │  ┌─────────┐  ┌──────────┐  │      │   │
+│  │  │ • Replays       │  │  │  Linea  │  │   Flow   │  │      │   │
+│  │  │ • Physics Data  │  │  └─────────┘  └──────────┘  │      │   │
+│  │  └─────────────────┘  └─────────────────────────────┘      │   │
 │  └────────────────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────────────┘
                                     │
@@ -47,24 +42,37 @@ Following a comprehensive refactoring initiative based on Core Principles (ENHAN
 │                         Backend Layer                            │
 │  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────────┐  │
 │  │  Node.js    │  │ Socket.io   │  │  Blockchain Service     │  │
-│  │  Server     │  │  Server     │  │  (Ethers.js)            │  │
+│  │  Server     │  │  Server     │  │  (Multi-Provider)       │  │
 │  └─────────────┘  └─────────────┘  └─────────────────────────┘  │
 └─────────────────────────────────────────────────────────────────┘
-                                    │
-                                    ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                      Blockchain Layer                            │
-│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐  │
-│  │  HouseOfCards   │  │   Leaderboard   │  │      PoH        │  │
-│  │    Contract     │  │    Contract     │  │   Verification  │  │
-│  │                 │  │                 │  │                 │  │
-│  │ • Game logic    │  │ • Score storage │  │ • Human verify  │  │
-│  │ • Betting       │  │ • Rankings      │  │ • Attestations  │  │
-│  │ • Pot distrib   │  │ • Leaderboard   │  │                 │  │
-│  └─────────────────┘  └─────────────────┘  └─────────────────┘  │
-│                         (Linea Sepolia)                          │
-└─────────────────────────────────────────────────────────────────┘
 ```
+
+---
+
+## PL Genesis Enhancements (March 2026)
+
+### 1. Protocol Labs / IPFS Persistence ✅
+
+**Goal:** Decentralized storage for game state history and verifiable replays.
+
+**Implementation:**
+- Created `src/lib/ipfs.ts` using public gateways and pinning service abstractions.
+- Integrated `captureCollapseState` into `useGameState` to serialize 48-block tower states.
+- Automated pinning of tower physics (position, rotation) upon collapse.
+
+**Impact:**
+- Every game collapse creates a unique, immutable CID.
+- Players can share their "Final Tower" state via IPFS links.
+- Foundation for future "Play-to-Earn" or "Verified Physics" bounties.
+
+### 2. Multi-Chain Expansion (Flow & Polkadot) ✅
+
+**Goal:** Expand the "Frontiers of Collaboration" across multiple ecosystems.
+
+**Changes:**
+- Refactored `src/config/networks.ts` to include **Flow EVM Testnet** and **Polkadot Hub**.
+- Centralized `CONTRACT_ADDRESSES` in `src/config/contracts.ts` using a chain-ID record.
+- Added support for **Coinbase Smart Wallet** to lower the barrier for non-Web3 users.
 
 ---
 

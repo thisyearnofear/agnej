@@ -13,8 +13,9 @@ import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { GameSettingsConfig } from '@/components/GameSettings';
 import { GAME_MODES, TOWER_CONFIG } from '@/config';
 import type { GameState as ServerGameState } from './useGameSocket';
+import { uploadToIPFS } from '@/lib/ipfs';
 
-export type GameStatus = 'WAITING' | 'ACTIVE' | 'VOTING' | 'ENDED' | 'COLLAPSED';
+export type GameStatus = 'WAITING' | 'ACTIVE' | 'VOTING' | 'ENDED' | 'COLLAPSED' | 'PERSISTING';
 
 export interface Player {
   id: string;
@@ -57,6 +58,9 @@ export interface GameState {
   // Timer (for SOLO_COMPETITOR)
   timeLeft: number;
   
+  // Persistence (IPFS/Protocol Labs)
+  collapseCid: string | null;
+  
   // Timestamp for animations
   now: number;
 }
@@ -83,6 +87,9 @@ export interface GameActions {
   
   // Survivors
   setSurvivors: (survivors: Survivor[]) => void;
+  
+  // Persistence
+  captureCollapseState: (blocks: any[]) => Promise<string | null>;
   
   // Update timestamp
   tick: () => void;
@@ -122,6 +129,10 @@ export function useGameState(
   const [fallenCount, setFallenCount] = useState(0);
   const [potSize, setPotSizeState] = useState(0);
   const [survivors, setSurvivorsState] = useState<Survivor[]>([]);
+  
+  // Persistence state
+  const [isPersisting, setIsPersisting] = useState(false);
+  const [collapseCid, setCollapseCid] = useState<string | null>(null);
   
   // UI state
   const [showRules, setShowRulesState] = useState(isSolo);
@@ -168,10 +179,11 @@ export function useGameState(
   
   // Derived status
   const status: GameStatus = useMemo(() => {
+    if (isPersisting) return 'PERSISTING';
     if (gameOver) return towerCollapsed ? 'COLLAPSED' : 'ENDED';
     if (isSolo) return 'ACTIVE';
     return (serverState?.status as GameStatus) || 'WAITING';
-  }, [gameOver, towerCollapsed, isSolo, serverState?.status]);
+  }, [isPersisting, gameOver, towerCollapsed, isSolo, serverState?.status]);
   
   // Derived timeLeft
   const timeLeft = useMemo(() => {
@@ -193,6 +205,7 @@ export function useGameState(
     setScore(0);
     setFallenCount(0);
     setSurvivorsState([]);
+    setCollapseCid(null);
     setSoloTimeLeft(initialTime);
     setShowRulesState(isSolo);
   }, [initialTime, isSolo]);
@@ -211,6 +224,7 @@ export function useGameState(
     setTowerCollapsed(false);
     setScore(0);
     setFallenCount(0);
+    setCollapseCid(null);
     soloTimeLeftRef.current = initialTime;
     setSoloTimeLeft(initialTime);
     setSurvivorsState([]);
@@ -260,6 +274,34 @@ export function useGameState(
   const setSurvivors = useCallback((newSurvivors: Survivor[]) => {
     setSurvivorsState(newSurvivors);
   }, []);
+
+  const captureCollapseState = useCallback(async (blocks: any[]): Promise<string | null> => {
+    if (isPersisting) return null;
+    
+    setIsPersisting(true);
+    try {
+      const historyData = {
+        timestamp: Date.now(),
+        score,
+        difficulty: settings.difficulty,
+        mode: settings.gameMode,
+        blocks: blocks.map((b, i) => ({
+          id: i,
+          position: { x: b.position.x, y: b.position.y, z: b.position.z },
+          rotation: { x: b.quaternion.x, y: b.quaternion.y, z: b.quaternion.z, w: b.quaternion.w }
+        }))
+      };
+      
+      const cid = await uploadToIPFS(historyData);
+      setCollapseCid(cid);
+      return cid;
+    } catch (err) {
+      console.error('Failed to persist state:', err);
+      return null;
+    } finally {
+      setIsPersisting(false);
+    }
+  }, [isPersisting, score, settings.difficulty, settings.gameMode]);
   
   const tick = useCallback(() => {
     setNow(Date.now());
@@ -324,9 +366,10 @@ export function useGameState(
     showHelpers,
     dragIndicator,
     timeLeft,
+    collapseCid,
     now,
   }), [status, gameOver, towerCollapsed, score, fallenCount, potSize, survivors, 
-       showRules, showHelpers, dragIndicator, timeLeft, now]);
+       showRules, showHelpers, dragIndicator, timeLeft, collapseCid, now]);
   
   // Compile actions object
   const actions: GameActions = useMemo(() => ({
@@ -342,10 +385,11 @@ export function useGameState(
     setShowHelpers,
     setDragIndicator,
     setSurvivors,
+    captureCollapseState,
     tick,
   }), [startGame, endGame, resetGame, incrementScore, incrementFallen, setPotSize,
        decrementTimer, resetTimer, setShowRules, setShowHelpers, setDragIndicator, 
-       setSurvivors, tick]);
+       setSurvivors, captureCollapseState, tick]);
   
   return {
     state,

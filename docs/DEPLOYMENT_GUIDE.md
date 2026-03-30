@@ -1,109 +1,88 @@
 # Agnej Deployment Guide
 
-This guide consolidates all deployment-related information for Agnej, including smart contract deployment, server setup, frontend configuration, and testing.
+> **Last Updated:** 2026-03-30  
+> **Version:** 3.0 (PL Genesis Hackathon)
 
-## Table of Contents
-- [Smart Contract Deployment](#smart-contract-deployment)
-- [Server Deployment](#server-deployment)
-- [Frontend Configuration](#frontend-configuration)
-- [Testing and Launch](#testing-and-launch)
+This guide covers the deployment of Agnej across multiple chains (Linea, Flow EVM, Polkadot Hub) and the Protocol Labs / IPFS persistence layer.
 
-## Smart Contract Deployment
+---
 
-### Prerequisites
-- Linea Mainnet ETH in deployer wallet
-- Private key for oracle account
-- Domain name for production server
-- WalletConnect Project ID
+## 1. Smart Contract Deployment
 
-### Deployment Steps
+Agnej uses the same Solidity source code for all supported chains.
 
-1. **Prepare Contracts**:
-   - Review `contracts/HouseOfCards.sol` and `contracts/Leaderboard.sol`.
-   - Update `ENTRY_STAKE` if needed (currently 0.001 ETH).
-
-2. **Deploy Using Remix or Hardhat**:
-   - **Remix**: Use Remix IDE to deploy contracts to Linea Mainnet.
-   - **Hardhat**: Use the provided Hardhat configuration and deployment script.
-
-3. **Record Deployed Addresses**:
-   - Save the deployed contract addresses for `HouseOfCards` and `Leaderboard`.
-
-## Server Deployment
-
-### Prerequisites
-- Hetzner VPS or similar (4GB RAM, 2 vCPU minimum)
-- Node.js 20+ installed
-- PM2 for process management
-- Nginx for reverse proxy
-
-### Deployment Steps
-
-1. **Setup Hetzner VPS**:
-   - Provision a VPS with Ubuntu 22.04 LTS.
-   - Install Node.js, Git, and PM2.
-
-2. **Deploy Application**:
-   - Clone the repository and install dependencies.
-   - Build the frontend and server.
-
-3. **Configure Server Environment**:
-   - Create `server/.env.production` with the required environment variables.
-
-4. **Start Server with PM2**:
-   - Start the server using PM2 and enable auto-restart.
-
-5. **Setup Nginx Reverse Proxy with SSL**:
-   - Configure Nginx to proxy requests to the server.
-   - Set up SSL using Certbot.
-
-## Frontend Configuration
-
-### Environment Variables
-
-Update `.env.production` with the following variables:
-
+### 1a. Linea Sepolia (Primary)
 ```bash
-NEXT_PUBLIC_CONTRACT_ADDRESS=0x[MAINNET_HOUSE_OF_CARDS_ADDRESS]
-NEXT_PUBLIC_LEADERBOARD_ADDRESS=0x[MAINNET_LEADERBOARD_ADDRESS]
-NEXT_PUBLIC_RPC_URL=https://rpc.linea.build
-NEXT_PUBLIC_SERVER_URL=https://api.yourdomain.com
-NEXT_PUBLIC_WALLET_CONNECT_ID=your_mainnet_project_id
-NEXT_PUBLIC_CHAIN_ID=59144
-NEXT_PUBLIC_ENTRY_STAKE=0.001
+# Compile and deploy via Hardhat
+npx hardhat run scripts/deploy.ts --network linea
 ```
 
-### Deployment Options
+### 1b. Flow EVM Testnet
+Flow EVM is fully compatible with standard EVM tools.
+```bash
+# Add Flow network to hardhat.config.ts
+# Chain ID: 545
+# RPC: https://testnet.evm.nodes.onflow.org
+npx hardhat run scripts/deploy.ts --network flow
+```
 
-- **Vercel**: Connect to GitHub and deploy.
-- **Self-hosted VPS**: Configure Nginx and deploy.
+### 1c. Polkadot Hub Testnet
+Polkadot Hub uses the `resolc` compiler for PolkaVM optimization.
+```bash
+# Use the Polkadot Hardhat plugin
+npx hardhat compile --compiler resolc
+npx hardhat run scripts/deploy.ts --network polkadot
+```
 
-## Testing and Launch
+---
 
-### Pre-Launch Testing
+## 2. Frontend Configuration (IPFS & Multi-chain)
 
-- **Frontend Loading**: Ensure the site loads without errors.
-- **Wallet Connection**: Verify wallet connection to Linea Mainnet.
-- **Solo Mode**: Test solo practice and competitor modes.
-- **Multiplayer**: Test game creation, joining, and completion.
-- **Mobile Testing**: Ensure responsive design and touch controls work.
+### 2a. IPFS Configuration
+Agnej uses `src/lib/ipfs.ts` for decentralized persistence.
+- **Development:** Uses public IPFS gateways (ipfs.io).
+- **Production:** Recommended to add a Pinata or Web3.Storage API key to `.env`.
 
-### Launch Monitoring
+```env
+# .env
+NEXT_PUBLIC_IPFS_GATEWAY=https://ipfs.io/ipfs/
+# Optional: Pinata/Web3.Storage keys
+```
 
-- **Server Logs**: Monitor server logs using `pm2 logs agnej-server`.
-- **Performance**: Check CPU and memory usage with `pm2 monit`.
-- **Transactions**: Verify transactions on Lineascan.
+### 2b. Multi-chain Configuration
+Update `src/config/contracts.ts` with your newly deployed addresses:
 
-### Rollback Plan
+```typescript
+const CONTRACT_ADDRESSES = {
+  HOUSE_OF_CARDS: {
+    [lineaId]: '0x...',
+    [flowId]: '0x...',
+    [polkadotId]: '0x...',
+  },
+  // ...
+}
+```
 
-If critical issues are found:
-- Revert to the previous version using `git revert HEAD`.
-- Disable multiplayer temporarily if needed.
-- Switch to testnet if necessary.
+---
 
-## Resources
+## 3. Server Deployment (Multi-Provider)
 
-- **Linea Docs**: [https://docs.linea.build](https://docs.linea.build)
-- **Block Explorer**: [https://lineascan.build](https://lineascan.build)
-- **RPC Status**: [https://status.linea.build](https://status.linea.build)
-- **Hetzner Support**: [https://support.hetzner.com](https://support.hetzner.com)
+The Agnej server must be configured to handle multiplayer games on different chains.
+
+```env
+# server/.env
+LINEA_RPC_URL=...
+FLOW_RPC_URL=https://testnet.evm.nodes.onflow.org
+POLKADOT_RPC_URL=https://rpc.polkadot.io/testnet
+```
+
+The server automatically selects the correct provider based on the `chainId` provided in the client's handshake.
+
+---
+
+## 4. Testing Checklist
+
+- [ ] **IPFS:** Trigger tower collapse in Solo mode, verify CID is generated and accessible on `ipfs.io`.
+- [ ] **Flow:** Connect via Coinbase Wallet on Flow EVM, verify balance displays correctly.
+- [ ] **Polkadot:** Verify score submission to Polkadot Hub Leaderboard.
+- [ ] **Multi-chain:** Switch between chains in RainbowKit without page refresh.

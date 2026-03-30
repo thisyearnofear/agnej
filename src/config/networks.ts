@@ -6,6 +6,32 @@
 import { defineChain } from 'viem'
 import { lineaSepolia, sepolia, mainnet } from 'wagmi/chains'
 
+/** Flow EVM Testnet */
+export const flowEvmTestnet = defineChain({
+  id: 545,
+  name: 'Flow EVM Testnet',
+  nativeCurrency: {
+    decimals: 18,
+    name: 'FLOW',
+    symbol: 'FLOW',
+  },
+  rpcUrls: {
+    default: {
+      http: ['https://testnet.evm.nodes.onflow.org'],
+    },
+    public: {
+      http: ['https://testnet.evm.nodes.onflow.org'],
+    },
+  },
+  blockExplorers: {
+    default: {
+      name: 'Flowscan',
+      url: 'https://evm-testnet.flowscan.io',
+    },
+  },
+  testnet: true,
+})
+
 /** Polkadot Hub TestNet - EVM compatible chain */
 export const polkadotHubTestnet = defineChain({
   id: 420420417,
@@ -32,50 +58,33 @@ export const polkadotHubTestnet = defineChain({
   testnet: true,
 })
 
-/** Polkadot Hub MainNet */
-export const polkadotHub = defineChain({
-  id: 420420419,
-  name: 'Polkadot Hub',
-  nativeCurrency: {
-    decimals: 18,
-    name: 'DOT',
-    symbol: 'DOT',
-  },
-  rpcUrls: {
-    default: {
-      http: ['https://rpc.polkadot.io'],
-    },
-    public: {
-      http: ['https://rpc.polkadot.io'],
-    },
-  },
-  blockExplorers: {
-    default: {
-      name: 'Polkascan',
-      url: 'https://polkascan.io',
-    },
-  },
-  testnet: false,
-})
-
-export const SUPPORTED_CHAINS = [lineaSepolia, sepolia, mainnet, polkadotHubTestnet] as const
+/** Supported Chains for Agnej */
+export const SUPPORTED_CHAINS = [
+  lineaSepolia, 
+  flowEvmTestnet,
+  polkadotHubTestnet,
+  sepolia, 
+  mainnet
+] as const
 
 export type SupportedChainId = typeof SUPPORTED_CHAINS[number]['id']
 
 /** RPC endpoints for each chain - CORS-friendly public nodes */
-export const RPC_ENDPOINTS: Record<SupportedChainId, string> = {
+export const RPC_ENDPOINTS: Record<number, string> = {
   [lineaSepolia.id]: process.env.NEXT_PUBLIC_RPC_URL || 'https://rpc.sepolia.linea.build',
+  [flowEvmTestnet.id]: 'https://testnet.evm.nodes.onflow.org',
+  [polkadotHubTestnet.id]: process.env.NEXT_PUBLIC_POLKADOT_RPC_URL || 'https://rpc.polkadot.io/testnet',
   [sepolia.id]: 'https://ethereum-sepolia-rpc.publicnode.com',
   [mainnet.id]: 'https://ethereum-rpc.publicnode.com',
-  [polkadotHubTestnet.id]: process.env.NEXT_PUBLIC_POLKADOT_RPC_URL || 'https://rpc.polkadot.io/testnet',
 }
 
 /** Block explorer URLs for transaction links */
-export const EXPLORER_URLS: Record<SupportedChainId, string> = {
+export const EXPLORER_URLS: Record<number, string> = {
   [lineaSepolia.id]: 'https://sepolia.lineascan.build',
+  [flowEvmTestnet.id]: 'https://evm-testnet.flowscan.io',
+  [polkadotHubTestnet.id]: 'https://polkascan.io/pre',
   [sepolia.id]: 'https://sepolia.etherscan.io',
   [mainnet.id]: 'https://etherscan.io',
-  [polkadotHubTestnet.id]: 'https://polkascan.io/pre',
 }
 
 /** External API endpoints */
@@ -87,11 +96,13 @@ export const EXTERNAL_APIS = {
 } as const
 
 /** Get explorer URL for a transaction */
-export function getTxExplorerUrl(chainId: SupportedChainId, hash: string): string {
-  return `${EXPLORER_URLS[chainId]}/tx/${hash}`
+export function getTxExplorerUrl(chainId: number, hash: string): string {
+  const baseUrl = EXPLORER_URLS[chainId] || EXPLORER_URLS[lineaSepolia.id]
+  return `${baseUrl}/tx/${hash}`
 }
 
 /** Get explorer URL for an address */
-export function getAddressExplorerUrl(chainId: SupportedChainId, address: string): string {
-  return `${EXPLORER_URLS[chainId]}/address/${address}`
+export function getAddressExplorerUrl(chainId: number, address: string): string {
+  const baseUrl = EXPLORER_URLS[chainId] || EXPLORER_URLS[lineaSepolia.id]
+  return `${baseUrl}/address/${address}`
 }

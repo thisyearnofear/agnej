@@ -352,6 +352,16 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
               actions.endGame(true)
               gameOverRef.current = true
               addToast({ type: 'error', message: 'Tower Collapsed!' })
+              
+              // Protocol Labs / IPFS: Capture and persist the collapse state
+              actions.captureCollapseState(blocksRef.current).then(cid => {
+                if (cid) {
+                  addToast({ 
+                    type: 'success', 
+                    message: `Game state persisted to IPFS: ${cid.substring(0, 10)}...` 
+                  })
+                }
+              })
             }
           })
         }
@@ -721,6 +731,7 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
           isConfirming={isConfirmingScore}
           isConfirmed={isScoreConfirmed}
           onSubmitScore={address ? () => submitScore(settings.difficulty, state.score) : undefined}
+          collapseCid={state.collapseCid}
         />
       )}
 
