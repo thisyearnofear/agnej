@@ -97,12 +97,18 @@ export interface UseGameStateReturn {
   totalBlocks: number;
   maxPlayers: number;
   isPractice: boolean;
+  // Player-derived values (consolidated from Game.tsx)
+  players: Player[];
+  currentPlayerId: string | undefined;
+  isCurrentPlayer: boolean;
+  isSpectator: boolean;
 }
 
 export function useGameState(
   settings: GameSettingsConfig,
   serverState?: ServerGameState | null,
-  serverTimeLeft?: number
+  serverTimeLeft?: number,
+  userAddress?: string
 ): UseGameStateReturn {
   // Determine if this is a solo mode
   const isSolo = settings.gameMode.startsWith('SOLO');
@@ -259,6 +265,52 @@ export function useGameState(
     setNow(Date.now());
   }, []);
   
+  // Player-derived values (consolidated from Game.tsx)
+  const players = useMemo((): Player[] => {
+    if (isSolo) {
+      return [{
+        id: 'solo-player',
+        address: 'You',
+        isAlive: true,
+        isCurrentTurn: true
+      }]
+    } else if (settings.gameMode === 'SINGLE_VS_AI') {
+      const aiPlayers = Array.from({ length: settings.aiOpponentCount || 1 }, (_, i) => ({
+        id: `ai-${i}`,
+        address: `AI ${i + 1}`,
+        isAlive: true,
+        isCurrentTurn: false
+      }))
+      return [{
+        id: 'human-player',
+        address: 'You',
+        isAlive: true,
+        isCurrentTurn: true
+      }, ...aiPlayers]
+    } else {
+      return serverState?.players.map((addr: string) => ({
+        id: addr,
+        address: addr,
+        isAlive: true,
+        isCurrentTurn: addr === serverState.currentPlayer
+      })) || []
+    }
+  }, [isSolo, settings.gameMode, settings.aiOpponentCount, serverState?.players, serverState?.currentPlayer])
+
+  const currentPlayerId = useMemo(() => {
+    if (isSolo) return 'solo-player'
+    if (settings.gameMode === 'SINGLE_VS_AI') return 'human-player'
+    return serverState?.currentPlayer || undefined
+  }, [isSolo, settings.gameMode, serverState?.currentPlayer])
+
+  const isCurrentPlayer = useMemo(() => {
+    if (settings.gameMode !== 'MULTIPLAYER') return true
+    const normalizedAddr = userAddress?.toLowerCase()
+    return serverState?.currentPlayer?.toLowerCase() === normalizedAddr
+  }, [settings.gameMode, userAddress, serverState?.currentPlayer])
+
+  const isSpectator = settings.gameMode === 'MULTIPLAYER' && serverState?.status === 'ACTIVE' && !isCurrentPlayer
+
   // Compile state object
   const state: GameState = useMemo(() => ({
     status,
@@ -303,5 +355,9 @@ export function useGameState(
     totalBlocks: TOWER_CONFIG.TOTAL_BLOCKS,
     maxPlayers,
     isPractice: isSolo,
+    players,
+    currentPlayerId,
+    isCurrentPlayer,
+    isSpectator,
   };
 }

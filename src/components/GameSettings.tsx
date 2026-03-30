@@ -207,9 +207,9 @@ export default function GameSettings({ onStart }: GameSettingsProps) {
             features: [
               "AI difficulty scaling",
               "Practice multiplayer",
-              "Coming soon",
+              "Local — no server needed",
             ],
-            disabled: true,
+            disabled: false,
           },
           {
             key: "MULTIPLAYER",

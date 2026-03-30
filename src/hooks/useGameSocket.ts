@@ -70,10 +70,11 @@ export function useGameSocket(settings?: GameSettingsConfig) {
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
-    // Don't connect to server for solo practice & competitor modes
+    // Don't connect to server for solo & AI modes
     if (
       settings?.gameMode === "SOLO_PRACTICE" ||
-      settings?.gameMode === "SOLO_COMPETITOR"
+      settings?.gameMode === "SOLO_COMPETITOR" ||
+      settings?.gameMode === "SINGLE_VS_AI"
     ) {
       console.log(`${settings.gameMode}: Skipping server connection`);
       // Defer state reset to next tick to avoid cascading render warning

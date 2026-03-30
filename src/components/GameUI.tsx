@@ -172,7 +172,7 @@ export default function GameUI({
           )}
 
           {/* Status Card */}
-          <div className="bg-black/40 backdrop-blur-md border border-white/10 rounded-xl p-4 text-white">
+          <div className="bg-gray-900/40 backdrop-blur-md border border-white/10 rounded-xl p-4 text-white">
             <div className="flex items-center gap-3">
               <div className={`w-3 h-3 rounded-full animate-pulse ${
                 gameState === "ACTIVE" ? "bg-green-500" :
@@ -199,16 +199,18 @@ export default function GameUI({
         {/* Right Side: Pot / Score */}
         <div className="flex gap-4">
           {isSoloCompetitor && score !== undefined && (
-            <div className={`bg-black/40 backdrop-blur-md border border-white/10 rounded-xl p-4 text-white transition-transform ${scoreJuice ? "scale-110" : ""}`}>
+            <div className={`bg-gray-900/50 backdrop-blur-md rounded-xl p-4 text-white transition-transform border border-yellow-500/20 ${scoreJuice ? "scale-110" : ""}`}
+              style={scoreJuice ? { boxShadow: '0 0 20px rgba(234,179,8,0.3)' } : undefined}>
               <div className="text-xs text-gray-400 uppercase tracking-wider">Score</div>
-              <div className="text-2xl font-bold text-yellow-400">{score}</div>
+              <div className="text-2xl font-bold bg-gradient-to-r from-yellow-400 to-amber-500 bg-clip-text text-transparent">{score}</div>
             </div>
           )}
           
           {!isPractice && (
-            <div className="bg-black/40 backdrop-blur-md border border-white/10 rounded-xl p-4 text-white">
+            <div className="bg-gray-900/50 backdrop-blur-md rounded-xl p-4 text-white border border-green-500/20"
+              style={{ boxShadow: '0 0 12px rgba(34,197,94,0.1)' }}>
               <div className="text-xs text-gray-400 uppercase tracking-wider">Pot Size</div>
-              <div className="text-2xl font-bold text-green-400">${potSize.toFixed(2)}</div>
+              <div className="text-2xl font-bold bg-gradient-to-r from-green-400 to-emerald-500 bg-clip-text text-transparent">${potSize.toFixed(2)}</div>
             </div>
           )}
         </div>
@@ -216,8 +218,7 @@ export default function GameUI({
 
       {/* Centered Title */}
       <div className="absolute top-4 left-1/2 -translate-x-1/2 pointer-events-none">
-        <h1 className="text-2xl md:text-3xl font-black tracking-widest text-white/80"
-          style={{ textShadow: '0 0 20px rgba(255,255,255,0.15)' }}>
+        <h1 className="text-2xl md:text-3xl font-black tracking-widest bg-gradient-to-r from-blue-400 via-purple-500 to-pink-500 bg-clip-text text-transparent">
           AGNEJ
         </h1>
       </div>
@@ -225,11 +226,12 @@ export default function GameUI({
       {/* Center: Timer */}
       {gameState === "ACTIVE" && timeLeft !== undefined && (isSoloCompetitor || gameMode === GAME_MODES.MULTIPLAYER.id) && (
         <div className={`absolute top-24 left-1/2 -translate-x-1/2 pointer-events-none flex flex-col items-center gap-2 ${uiTransition} ${uiOpacity}`}>
-          <div className={`text-4xl font-black drop-shadow-lg transition-colors duration-300 ${timeLeft <= 8 ? "text-red-500 animate-pulse" : "text-white"}`}>
+          <div className={`text-4xl font-black drop-shadow-lg transition-colors duration-300 ${timeLeft <= 8 ? "text-red-500 animate-pulse" : "text-white"}`}
+            style={timeLeft > 8 ? { textShadow: '0 0 15px rgba(59,130,246,0.4)' } : { textShadow: '0 0 15px rgba(239,68,68,0.5)' }}>
             {timeLeft}s
           </div>
           <div className="w-64 h-2 bg-black/50 rounded-full overflow-hidden backdrop-blur-sm border border-white/10">
-            <div className={`h-full transition-all duration-1000 ease-linear ${timeLeft <= 8 ? "bg-red-500" : "bg-blue-400"}`} style={{ width: `${(timeLeft / 30) * 100}%` }} />
+            <div className={`h-full transition-all duration-1000 ease-linear ${timeLeft <= 8 ? "bg-gradient-to-r from-red-600 to-red-400" : "bg-gradient-to-r from-blue-600 to-blue-400"}`} style={{ width: `${(timeLeft / 30) * 100}%` }} />
           </div>
         </div>
       )}
@@ -237,7 +239,7 @@ export default function GameUI({
       {/* Bottom: Controls & Info */}
       <div className={`flex flex-col md:flex-row gap-4 items-end pointer-events-auto ${uiTransition} ${uiOpacity}`}>
         {/* Player List */}
-        <div className="bg-black/40 backdrop-blur-md border border-white/10 rounded-xl p-4 text-white flex-1 max-w-md">
+        <div className="bg-gray-900/40 backdrop-blur-md border border-white/10 rounded-xl p-4 text-white flex-1 max-w-md">
           <div className="flex justify-between items-center mb-2">
             <span className="text-xs text-gray-400 uppercase tracking-wider">
               Players ({players.length}/{maxPlayers})
@@ -274,7 +276,7 @@ export default function GameUI({
               <span>{stability.toFixed(0)}%</span>
             </div>
             <div className="h-1.5 bg-black/50 rounded-full overflow-hidden">
-              <div className={`h-full transition-all duration-500 ${stability > 60 ? "bg-green-500" : stability > 30 ? "bg-yellow-500" : "bg-red-500"}`} style={{ width: `${stability}%` }} />
+              <div className={`h-full transition-all duration-500 ${stability > 60 ? "bg-gradient-to-r from-green-600 to-green-400" : stability > 30 ? "bg-gradient-to-r from-yellow-600 to-yellow-400" : "bg-gradient-to-r from-red-600 to-red-400"}`} style={{ width: `${stability}%` }} />
             </div>
           </div>
         </div>
@@ -282,28 +284,28 @@ export default function GameUI({
         {/* Action Buttons */}
         <div className="flex flex-col gap-2">
           {gameState === "WAITING" && (
-            <button onClick={onJoin} className="bg-gradient-to-r from-green-600 to-green-500 hover:from-green-500 hover:to-green-400 text-white font-bold py-3 px-6 rounded-xl shadow-lg transition-all transform hover:scale-105">
-              🎮 Join Game
+            <button onClick={onJoin} className="bg-gradient-to-r from-green-600 to-green-500 hover:from-green-500 hover:to-green-400 text-white font-bold py-3 px-6 rounded-xl shadow-lg shadow-green-900/50 transition-all transform hover:scale-105 hover:-translate-y-0.5">
+              Join Game
             </button>
           )}
           
           {gameState === "ACTIVE" && (
             <>
-              <button onClick={onReload} className="bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 text-white font-bold py-3 px-6 rounded-xl shadow-lg transition-all transform hover:scale-105">
-                🔄 Reload
+              <button onClick={onReload} className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white font-bold py-3 px-6 rounded-xl shadow-lg shadow-blue-900/50 transition-all transform hover:scale-105 hover:-translate-y-0.5">
+                Reload
               </button>
-              <button onClick={() => onVote(true)} className="bg-gradient-to-r from-purple-600 to-purple-500 hover:from-purple-500 hover:to-purple-400 text-white font-bold py-2 px-6 rounded-xl shadow-lg transition-all">
-                💰 Vote Split
+              <button onClick={() => onVote(true)} className="bg-white/5 hover:bg-white/10 border border-white/10 hover:border-purple-500/50 text-white font-bold py-2 px-6 rounded-xl transition-all transform hover:scale-105">
+                Vote Split
               </button>
             </>
           )}
 
           {/* Settings */}
           <div className="flex gap-2">
-            <button onClick={toggleRules} className="bg-black/40 backdrop-blur-md border border-white/10 rounded-lg p-3 text-white hover:bg-white/10 transition-colors">
+            <button onClick={toggleRules} className="bg-gray-900/40 backdrop-blur-md border border-white/10 rounded-lg p-3 text-white hover:bg-white/10 transition-colors">
               <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
             </button>
-            <button onClick={() => setShowHelpers(!showHelpers)} className={`backdrop-blur-md border rounded-lg p-3 transition-colors ${showHelpers ? "bg-green-500/20 border-green-500/50 text-green-400" : "bg-black/40 border-white/10 text-white hover:bg-white/10"}`}>
+            <button onClick={() => setShowHelpers(!showHelpers)} className={`backdrop-blur-md border rounded-lg p-3 transition-colors ${showHelpers ? "bg-green-500/20 border-green-500/50 text-green-400" : "bg-gray-900/40 border-white/10 text-white hover:bg-white/10"}`}>
               <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
             </button>
           </div>

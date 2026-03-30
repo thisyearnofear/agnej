@@ -1,12 +1,13 @@
 'use client'
 
-import React, { useEffect, useRef } from 'react'
+import React, { useEffect, useRef, useCallback } from 'react'
 import { useAccount } from 'wagmi'
 import { GameSettingsConfig } from './GameSettings'
 import { loadScript } from './Game/physicsHelpers'
 import { getPhysicsConfig, ORBIT_CONFIG, ASSETS } from '@/config'
 import { createWobble, getWobbleOffset, getTowerSway, type WobbleState } from '@/lib/towerAnimations'
 import { generateWoodTexture, generatePlywoodTexture } from '@/lib/textures'
+import { generateAIMove, getAIMoveDelay, type BlockState, type AIDifficulty } from '@/lib/aiPlayer'
 
 declare global {
   var Physijs: any
@@ -79,7 +80,7 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
   const { toasts, addToast, dismissToast } = useToast()
 
   // Centralized game state
-  const { state, actions, isActive, isEnded } = useGameState(settings, serverState, serverTimeLeft)
+  const { state, actions, isActive, isEnded, players, currentPlayerId, isCurrentPlayer, isSpectator } = useGameState(settings, serverState, serverTimeLeft, address)
 
   // Auth: Auto-trigger signing for Multiplayer
   useEffect(() => {
@@ -92,53 +93,6 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
   const gameState: GameState = (settings.gameMode === 'SOLO_PRACTICE' || settings.gameMode === 'SOLO_COMPETITOR')
     ? 'ACTIVE'
     : (serverState?.status as GameState || 'WAITING')
-
-  // Handle different game modes
-  const players = React.useMemo(() => {
-    if (settings.gameMode === 'SOLO_PRACTICE' || settings.gameMode === 'SOLO_COMPETITOR') {
-      return [{
-        id: 'solo-player',
-        address: 'You',
-        isAlive: true,
-        isCurrentTurn: true
-      }]
-    } else if (settings.gameMode === 'SINGLE_VS_AI') {
-      const aiPlayers = Array.from({ length: settings.aiOpponentCount || 1 }, (_, i) => ({
-        id: `ai-${i}`,
-        address: `AI ${i + 1}`,
-        isAlive: true,
-        isCurrentTurn: false
-      }))
-      return [{
-        id: 'human-player',
-        address: 'You',
-        isAlive: true,
-        isCurrentTurn: true
-      }, ...aiPlayers]
-    } else {
-      return serverState?.players.map((addr: string) => ({
-        id: addr,
-        address: addr,
-        isAlive: true,
-        isCurrentTurn: addr === serverState.currentPlayer
-      })) || []
-    }
-  }, [settings, serverState])
-
-  const currentPlayerId = (settings.gameMode === 'SOLO_PRACTICE' || settings.gameMode === 'SOLO_COMPETITOR')
-    ? 'solo-player'
-    : settings.gameMode === 'SINGLE_VS_AI'
-      ? 'human-player'
-      : serverState?.currentPlayer || undefined
-
-  // Determine if this client is current player
-  const userAddress = address?.toLowerCase()
-  const isCurrentPlayer = settings.gameMode === 'MULTIPLAYER'
-    ? serverState?.currentPlayer?.toLowerCase() === userAddress
-    : true
-
-  // Spectator check
-  const isSpectator = settings.gameMode === 'MULTIPLAYER' && serverState?.status === 'ACTIVE' && !isCurrentPlayer
 
   // Keep refs in sync with centralized state
   const containerRef = useRef<HTMLDivElement>(null)
@@ -159,6 +113,7 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
   const orbitControlsRef = useRef<any>(null)
   const lastTimerWarningRef = useRef<number>(0)
   const lastTimerTickRef = useRef<number>(0)
+  const aiTurnRef = useRef(false)
   const eventHandlersRef = useRef<{
     handleMouseMove: ((evt: MouseEvent) => void) | null
     handleInputStart: ((evt: MouseEvent | TouchEvent) => void) | null
@@ -653,6 +608,60 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
     }
   }
 
+  const executeAIMove = useCallback(() => {
+    if (settings.gameMode !== 'SINGLE_VS_AI' || state.gameOver || aiTurnRef.current) return
+    aiTurnRef.current = true
+
+    const blocks = blocksRef.current
+    const scene = sceneRef.current
+    if (!scene || blocks.length === 0) { aiTurnRef.current = false; return }
+
+    const blockStates: BlockState[] = blocks.map(b => ({
+      position: { x: b.position.x, y: b.position.y, z: b.position.z },
+      rotation: { y: b.rotation.y },
+      userData: { layer: b.userData?.layer ?? 0, isLocked: b.userData?.isLocked ?? false },
+    }))
+
+    const difficulty: AIDifficulty = settings.difficulty as AIDifficulty
+    const delay = getAIMoveDelay(difficulty)
+
+    setTimeout(() => {
+      if (gameOverRef.current) { aiTurnRef.current = false; return }
+
+      const move = generateAIMove(blockStates, difficulty, Date.now())
+      if (!move || !blocksRef.current[move.blockIndex]) {
+        aiTurnRef.current = false
+        return
+      }
+
+      const block = blocksRef.current[move.blockIndex]
+      const force = new THREE.Vector3(move.force.x, move.force.y, move.force.z)
+
+      // Trigger wobble proportional to force
+      const forceLen = force.length()
+      const wobbleAmplitude = Math.min(0.02, forceLen * 0.0003)
+      if (wobbleAmplitude > 0.002) {
+        wobbleRef.current = createWobble(wobbleAmplitude)
+      }
+
+      if (block.setAngularVelocity) block.setAngularVelocity(new THREE.Vector3(0, 0, 0))
+      if (block.setLinearVelocity) block.setLinearVelocity(new THREE.Vector3(0, 0, 0))
+
+      if (typeof block.applyCentralImpulse === 'function') {
+        block.applyCentralImpulse(force)
+      } else {
+        block.applyCentralForce(force)
+      }
+
+      addToast({ type: 'info', message: `AI pulled block ${move.blockIndex + 1}` })
+
+      // Let physics settle, then re-enable human input
+      setTimeout(() => {
+        aiTurnRef.current = false
+      }, 500)
+    }, delay)
+  }, [settings.gameMode, settings.difficulty, addToast])
+
   // Timer effect for SOLO_COMPETITOR - decrement handled in render loop via actions.decrementTimer
   // This effect handles the timer warning toast
   useEffect(() => {
@@ -733,6 +742,7 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
 
       if (isSpectator || gameState !== 'ACTIVE' || state.gameOver) return
       if (settings.gameMode === 'MULTIPLAYER' && !isCurrentPlayer) return
+      if (settings.gameMode === 'SINGLE_VS_AI' && aiTurnRef.current) return
       if (evt.type === 'touchstart') evt.preventDefault()
 
       // Disable orbit during drag
@@ -823,6 +833,18 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
           } else {
             block.applyCentralForce(impulse)
           }
+        } else if (settings.gameMode === 'SINGLE_VS_AI') {
+          // Apply human move locally, then trigger AI response
+          if (block.setAngularVelocity) block.setAngularVelocity(new THREE.Vector3(0, 0, 0))
+          if (block.setLinearVelocity) block.setLinearVelocity(new THREE.Vector3(0, 0, 0))
+
+          if (typeof block.applyCentralImpulse === 'function') {
+            block.applyCentralImpulse(impulse)
+          } else {
+            block.applyCentralForce(impulse)
+          }
+
+          executeAIMove()
         } else if (socketRef.current && blockIndex !== -1) {
           socketRef.current.emit('submitMove', {
             blockIndex: blockIndex,
