@@ -6,6 +6,16 @@ export type GameState = "WAITING" | "ACTIVE" | "VOTING" | "ENDED" | "COLLAPSED";
 
 export { type Player };
 
+const PLAYER_COLORS = [
+  '#ef4444', // red
+  '#3b82f6', // blue
+  '#22c55e', // green
+  '#f59e0b', // amber
+  '#a855f7', // purple
+  '#ec4899', // pink
+  '#06b6d4', // cyan
+] as const;
+
 interface GameUIProps {
   // Centralized state (from useGameState)
   state: CentralizedGameState;
@@ -204,14 +214,22 @@ export default function GameUI({
         </div>
       </div>
 
+      {/* Centered Title */}
+      <div className="absolute top-4 left-1/2 -translate-x-1/2 pointer-events-none">
+        <h1 className="text-2xl md:text-3xl font-black tracking-widest text-white/80"
+          style={{ textShadow: '0 0 20px rgba(255,255,255,0.15)' }}>
+          AGNEJ
+        </h1>
+      </div>
+
       {/* Center: Timer */}
       {gameState === "ACTIVE" && timeLeft !== undefined && (isSoloCompetitor || gameMode === GAME_MODES.MULTIPLAYER.id) && (
         <div className={`absolute top-24 left-1/2 -translate-x-1/2 pointer-events-none flex flex-col items-center gap-2 ${uiTransition} ${uiOpacity}`}>
-          <div className={`text-4xl font-black drop-shadow-lg transition-colors duration-300 ${timeLeft <= 10 ? "text-red-500 animate-pulse" : "text-white"}`}>
+          <div className={`text-4xl font-black drop-shadow-lg transition-colors duration-300 ${timeLeft <= 8 ? "text-red-500 animate-pulse" : "text-white"}`}>
             {timeLeft}s
           </div>
           <div className="w-64 h-2 bg-black/50 rounded-full overflow-hidden backdrop-blur-sm border border-white/10">
-            <div className={`h-full transition-all duration-1000 ease-linear ${timeLeft <= 10 ? "bg-red-500" : "bg-blue-400"}`} style={{ width: `${(timeLeft / 30) * 100}%` }} />
+            <div className={`h-full transition-all duration-1000 ease-linear ${timeLeft <= 8 ? "bg-red-500" : "bg-blue-400"}`} style={{ width: `${(timeLeft / 30) * 100}%` }} />
           </div>
         </div>
       )}
@@ -230,15 +248,23 @@ export default function GameUI({
           </div>
           
           <div className="space-y-1 max-h-32 overflow-y-auto">
-            {players.map((player) => (
-              <div key={player.id} className={`flex items-center justify-between p-2 rounded text-sm ${player.isCurrentTurn ? "bg-white/10 border border-yellow-500/50" : "bg-white/5"}`}>
+            {players.map((player, index) => {
+              const playerColor = PLAYER_COLORS[index % PLAYER_COLORS.length]
+              return (
+              <div key={player.id} className={`flex items-center justify-between p-2 rounded text-sm ${player.isCurrentTurn ? "bg-white/10 border-2 animate-pulse" : "bg-white/5 border border-white/10"}`}
+                style={player.isCurrentTurn ? {
+                  borderColor: playerColor,
+                  boxShadow: `0 0 12px ${playerColor}66, 0 0 4px ${playerColor}33`
+                } : undefined}>
                 <div className="flex items-center gap-2">
-                  <span className={`w-2 h-2 rounded-full ${player.isAlive ? "bg-green-500" : "bg-red-500"}`} />
+                  <span className="w-2 h-2 rounded-full"
+                    style={player.isAlive ? { backgroundColor: playerColor } : { backgroundColor: '#ef4444' }} />
                   <span className="font-mono text-xs">{formatAddress(player.address)}</span>
                 </div>
-                {player.isCurrentTurn && <span className="text-xs text-yellow-400 font-bold">TURN</span>}
+                {player.isCurrentTurn && <span className="text-xs font-bold" style={{ color: playerColor }}>TURN</span>}
               </div>
-            ))}
+              )
+            })}
           </div>
 
           {/* Stability Bar */}

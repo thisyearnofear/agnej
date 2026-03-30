@@ -150,6 +150,25 @@ export const TIMING_CONFIG = {
   UI_UPDATE_INTERVAL: 500,
 } as const
 
+/** Orbit camera controls */
+export const ORBIT_CONFIG = {
+  MIN_DISTANCE: 15,
+  MAX_DISTANCE: 60,
+  MIN_POLAR: Math.PI / 6,
+  MAX_POLAR: Math.PI / 2.2,
+  DAMPING_FACTOR: 0.08,
+  TARGET: [0, 7, 0] as const,
+} as const
+
+/** Tower animation settings */
+export const ANIMATION_CONFIG = {
+  SWAY_SPEED: 0.3,
+  SWAY_AMPLITUDE: 0.005,
+  WOBBLE_DECAY: 1.5,
+  WOBBLE_MAX_AMPLITUDE: 0.02,
+  WOBBLE_MIN_AMPLITUDE: 0.003,
+} as const
+
 /** Asset paths */
 export const ASSETS = {
   WOOD_TEXTURE: '/images/wood.jpg',
@@ -159,4 +178,5 @@ export const ASSETS = {
   PHYSI_JS: '/js/physi.js',
   PHYSI_WORKER: '/js/physijs_worker.js',
   AMMO_JS: '/js/ammo.js',
+  ORBIT_CONTROLS: '/js/OrbitControls.js',
 } as const

@@ -2,9 +2,11 @@
 
 import React, { useEffect, useRef } from 'react'
 import { useAccount } from 'wagmi'
-import { ConnectButton } from '@rainbow-me/rainbowkit'
 import { GameSettingsConfig } from './GameSettings'
-import { loadScript, getPhysicsConfig } from './Game/physicsHelpers'
+import { loadScript } from './Game/physicsHelpers'
+import { getPhysicsConfig, ORBIT_CONFIG, ASSETS } from '@/config'
+import { createWobble, getWobbleOffset, getTowerSway, type WobbleState } from '@/lib/towerAnimations'
+import { generateWoodTexture, generatePlywoodTexture } from '@/lib/textures'
 
 declare global {
   var Physijs: any
@@ -17,13 +19,16 @@ declare global {
   }
 }
 
-import GameUI, { type GameState, Player } from './GameUI'
+import GameUI, { type GameState } from './GameUI'
 import GameOver from './MultiplayerGameOver'
 import SpectatorOverlay from './SpectatorOverlay'
+import ToastContainer from './ui/Toast'
 
 import { useGameContract } from '../hooks/useGameContract'
 import { useGameSocket } from '../hooks/useGameSocket'
 import { useLeaderboard } from '../hooks/useLeaderboard'
+import { useGameState } from '../hooks/useGameState'
+import { useToast } from '../hooks/useToast'
 
 interface GameProps {
   settings: GameSettingsConfig
@@ -56,7 +61,7 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
     signAndConnect
   } = useGameSocket(settings)
 
-  // Leaderboard Hook - Pass difficulty for correct high score fetching
+  // Leaderboard Hook
   const {
     submitScore,
     highScore,
@@ -70,14 +75,18 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
     refetchAll: refetchLeaderboard
   } = useLeaderboard(settings.difficulty)
 
+  // Toast notifications
+  const { toasts, addToast, dismissToast } = useToast()
+
+  // Centralized game state
+  const { state, actions, isActive, isEnded } = useGameState(settings, serverState, serverTimeLeft)
+
   // Auth: Auto-trigger signing for Multiplayer
   useEffect(() => {
     if (settings.gameMode === 'MULTIPLAYER' && !authSignature) {
       signAndConnect();
     }
   }, [settings.gameMode, authSignature, signAndConnect]);
-
-
 
   // Derived State from Server and Game Mode
   const gameState: GameState = (settings.gameMode === 'SOLO_PRACTICE' || settings.gameMode === 'SOLO_COMPETITOR')
@@ -98,7 +107,7 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
         id: `ai-${i}`,
         address: `AI ${i + 1}`,
         isAlive: true,
-        isCurrentTurn: false // Will be handled by server
+        isCurrentTurn: false
       }))
       return [{
         id: 'human-player',
@@ -107,11 +116,10 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
         isCurrentTurn: true
       }, ...aiPlayers]
     } else {
-      // MULTIPLAYER
       return serverState?.players.map((addr: string) => ({
         id: addr,
         address: addr,
-        isAlive: true, // TODO: Add to server state
+        isAlive: true,
         isCurrentTurn: addr === serverState.currentPlayer
       })) || []
     }
@@ -123,40 +131,50 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
       ? 'human-player'
       : serverState?.currentPlayer || undefined
 
-  // Local Visual State
-  const [potSize, setPotSize] = React.useState(0)
-  const [fallenCount, setFallenCount] = React.useState(0)
-  const [score, setScore] = React.useState(0)
-  const [gameOver, setGameOver] = React.useState(false)
-  const [gameWon, setGameWon] = React.useState(false)
-  const [hasJoinedGame, setHasJoinedGame] = React.useState(false)
-  const [survivors, setSurvivors] = React.useState<Array<{ address: string, isWinner: boolean }>>([])
-  const [towerCollapsed, setTowerCollapsed] = React.useState(false)
-  // Auto-show rules for solo modes
-  const [showRules, setShowRules] = React.useState(
-    settings.gameMode === 'SOLO_COMPETITOR' || settings.gameMode === 'SOLO_PRACTICE'
-  )
-  // Drag indicator state for mobile feedback
-  const [dragIndicator, setDragIndicator] = React.useState<{ x: number, y: number, length: number, angle: number } | null>(null)
-  // Visual Helpers State
-  const [showHelpers, setShowHelpers] = React.useState(settings.showHelpers)
-
-  // SOLO_COMPETITOR timer state (configurable duration, defaults to 30 seconds)
-  const [soloTimeLeft, setSoloTimeLeft] = React.useState(settings.timerDuration || 30)
-
-  // Multiplayer timer (from server) or solo timer
-  const timeLeft = settings.gameMode === 'MULTIPLAYER' ? serverTimeLeft : (
-    settings.gameMode === 'SOLO_COMPETITOR' ? soloTimeLeft : 30
-  )
-
-  // Determine if this client is current player (using address, not socket ID)
+  // Determine if this client is current player
   const userAddress = address?.toLowerCase()
   const isCurrentPlayer = settings.gameMode === 'MULTIPLAYER'
     ? serverState?.currentPlayer?.toLowerCase() === userAddress
-    : true // Solo modes are always "current"
+    : true
 
-  // Spectator check: in multiplayer, you're spectator if game is active but not your turn
+  // Spectator check
   const isSpectator = settings.gameMode === 'MULTIPLAYER' && serverState?.status === 'ACTIVE' && !isCurrentPlayer
+
+  // Keep refs in sync with centralized state
+  const containerRef = useRef<HTMLDivElement>(null)
+  const socketRef = useRef<any>(null)
+  const gameOverRef = useRef(state.gameOver)
+  const showRulesRef = useRef(state.showRules)
+  const showHelpersRef = useRef(state.showHelpers)
+  const blocksRef = useRef<any[]>([])
+  const dragStartRef = useRef<any>(null)
+  const sceneRef = useRef<any>(null)
+  const scoredBlocksRef = useRef<Set<number>>(new Set())
+  const requestRef = useRef<number | undefined>(undefined)
+  const workerCheckTimeouts = useRef<Set<NodeJS.Timeout>>(new Set())
+  const sceneUpdateListenerRef = useRef<any>(null)
+  const initRetryCount = useRef<number>(0)
+  const hoveredBlockRef = useRef<any>(null)
+  const wobbleRef = useRef<WobbleState | null>(null)
+  const orbitControlsRef = useRef<any>(null)
+  const lastTimerWarningRef = useRef<number>(0)
+  const lastTimerTickRef = useRef<number>(0)
+  const eventHandlersRef = useRef<{
+    handleMouseMove: ((evt: MouseEvent) => void) | null
+    handleInputStart: ((evt: MouseEvent | TouchEvent) => void) | null
+    handleInputMove: ((evt: MouseEvent | TouchEvent) => void) | null
+    handleInputEnd: ((evt: MouseEvent | TouchEvent) => void) | null
+  }>({
+    handleMouseMove: null,
+    handleInputStart: null,
+    handleInputMove: null,
+    handleInputEnd: null
+  })
+
+  useEffect(() => { gameOverRef.current = state.gameOver }, [state.gameOver])
+  useEffect(() => { showRulesRef.current = state.showRules }, [state.showRules])
+  useEffect(() => { showHelpersRef.current = state.showHelpers }, [state.showHelpers])
+  useEffect(() => { socketRef.current = socket }, [socket])
 
   // Sync Contract Data
   useEffect(() => {
@@ -165,86 +183,7 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
     }
   }, [gameStateData])
 
-  // Handle Multiplayer Game End States
-  useEffect(() => {
-    if (settings.gameMode !== 'MULTIPLAYER' || !serverState) return
-
-    // Handle tower collapse
-    if (serverState.status === 'COLLAPSED') {
-      setTowerCollapsed(true)
-      // Determine survivors (players in activePlayers array)
-      const survivorList = serverState.activePlayers?.map(addr => ({
-        address: addr,
-        isWinner: false // Will be set below
-      })) || []
-
-      // Last survivor is the winner
-      if (survivorList.length > 0) {
-        survivorList[0].isWinner = true
-      }
-
-      setSurvivors(survivorList)
-      setGameOver(true)
-    }
-
-    // Handle natural game end (only 1 player left)
-    if (serverState.status === 'ENDED') {
-      setGameOver(true)
-      const survivorList = serverState.activePlayers?.map(addr => ({
-        address: addr,
-        isWinner: true // All remaining players won
-      })) || []
-      setSurvivors(survivorList)
-    }
-  }, [serverState?.status, serverState?.activePlayers, settings.gameMode])
-
-  // Timer Logic - Only for SOLO_COMPETITOR mode (multiplayer uses server timer)
-  useEffect(() => {
-    let interval: NodeJS.Timeout
-    // Timer is ONLY enabled for SOLO_COMPETITOR mode
-    if (settings.gameMode === 'SOLO_COMPETITOR' && gameState === 'ACTIVE' && !gameOver && !gameWon && !showRules) {
-      interval = setInterval(() => {
-        setSoloTimeLeft(prev => {
-          if (prev <= 1) {
-            // Time's up - trigger game over
-            setGameOver(true)
-            return 0
-          }
-          return prev - 1
-        })
-      }, 1000)
-    }
-    return () => clearInterval(interval)
-  }, [gameState, gameOver, gameWon, settings.gameMode, showRules])
-
-  const containerRef = useRef<HTMLDivElement>(null)
-  const socketRef = useRef<any>(null)
-  const gameOverRef = useRef(false)
-  const showRulesRef = useRef(showRules)
-  const showHelpersRef = useRef(showHelpers)
-
-  useEffect(() => {
-    showRulesRef.current = showRules
-  }, [showRules])
-
-  useEffect(() => {
-    showHelpersRef.current = showHelpers
-  }, [showHelpers])
-
-  const blocksRef = useRef<any[]>([])
-  const dragStartRef = useRef<any>(null)
-  const sceneRef = useRef<any>(null)
-  const initializedRef = useRef<boolean>(false)
-  const scoredBlocksRef = useRef<Set<number>>(new Set())
-  const requestRef = useRef<number | undefined>(undefined)
-  const workerCheckTimeouts = useRef<Set<NodeJS.Timeout>>(new Set())
-  const sceneUpdateListenerRef = useRef<any>(null)
-  const initRetryCount = useRef<number>(0)
-
-  useEffect(() => {
-    socketRef.current = socket
-  }, [socket])
-
+  // Sync multiplayer physics state
   useEffect(() => {
     if (settings.gameMode === 'SOLO_PRACTICE' || settings.gameMode === 'SOLO_COMPETITOR') return
     if (!physicsState || blocksRef.current.length === 0) return
@@ -261,120 +200,6 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
     }
   }, [physicsState, settings.gameMode])
 
-  useEffect(() => {
-    if (typeof window === 'undefined') return
-
-    const init = async () => {
-      // Remove the initializedRef guard - let React's useEffect handle this
-      // console.log('[INIT] Initializing game...') // Removed debug log
-
-      // Load required scripts (only if not already loaded)
-      try {
-        // Load Three.js first
-        if (!window.THREE) {
-          await loadScript('/js/three.min.js')
-        }
-
-        // Load Stats.js
-        if (!window.Stats) {
-          await loadScript('/js/stats.js')
-        }
-
-        // Load Physijs
-        if (!window.Physijs) {
-          await loadScript('/js/physi.js')
-        }
-
-        // Set physijs configurations
-        if (window.Physijs) {
-          window.Physijs.scripts.worker = '/js/physijs_worker.js'
-          window.Physijs.scripts.ammo = '/js/ammo.js'
-        } else {
-          console.error('Physijs is not available')
-        }
-
-        // Initialize the scene with a small delay to ensure DOM is ready
-        setTimeout(() => initScene(), 50)
-
-        // Handle window resize
-        const handleResize = () => {
-          const engine = engineRef.current
-          if (engine.renderer && engine.camera && containerRef.current) {
-            const rect = containerRef.current.getBoundingClientRect()
-            const width = rect.width
-            const height = rect.height
-
-            engine.camera.aspect = width / height
-            engine.camera.updateProjectionMatrix()
-            engine.renderer.setSize(width, height)
-          }
-        }
-
-        window.addEventListener('resize', handleResize)
-      } catch (error) {
-        console.error('Error initializing game:', error)
-        return
-      }
-    }
-
-    init()
-
-    // Main cleanup function - runs when component unmounts or dependencies change
-    return () => {
-      // Clear all pending worker check timeouts
-      workerCheckTimeouts.current.forEach(timeoutId => clearTimeout(timeoutId))
-      workerCheckTimeouts.current.clear()
-
-      if (requestRef.current) {
-        cancelAnimationFrame(requestRef.current)
-      }
-
-      // Cleanup Scene
-      if (sceneRef.current) {
-        // console.log('[CLEANUP] Cleaning up Physijs scene') // Removed debug log
-        const scene = sceneRef.current as any
-
-        try {
-          // CRITICAL: Remove the update event listener FIRST
-          if (sceneUpdateListenerRef.current) {
-            // console.log('[CLEANUP] Removing scene update listener') // Removed debug log
-            scene.removeEventListener('update', sceneUpdateListenerRef.current)
-            sceneUpdateListenerRef.current = null
-          }
-
-          // Remove all objects from scene
-          // console.log('[CLEANUP] Removing scene objects...') // Removed debug log
-          while (sceneRef.current.children.length > 0) {
-            sceneRef.current.remove(sceneRef.current.children[0]);
-          }
-
-          // Stop simulation
-          scene.onSimulationResume = function () { }
-
-          // DON'T terminate the worker - let Physijs manage it
-          // Terminating it corrupts Physijs's global state
-          // console.log('[CLEANUP] Leaving worker alive for Physijs to manage') // Removed debug log
-        } catch (err) {
-          console.warn('[CLEANUP] Error during scene cleanup:', err)
-        }
-
-        sceneRef.current = null
-      }
-
-      if (engineRef.current.renderer) {
-        engineRef.current.renderer.dispose()
-        if (engineRef.current.renderer.domElement && engineRef.current.renderer.domElement.parentNode) {
-          engineRef.current.renderer.domElement.parentNode.removeChild(engineRef.current.renderer.domElement)
-        }
-        engineRef.current.renderer = null
-      }
-
-      // Reset refs
-      blocksRef.current = []
-      scoredBlocksRef.current.clear()
-    }
-  }, [settings.gameMode, settings.difficulty]) // Re-init when gameMode or difficulty changes
-
   // Engine Refs to persist Three.js objects across renders
   const engineRef = useRef<{
     renderer: any
@@ -382,6 +207,7 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
     materials: {
       table: any
       block: any
+      block2: any
       lockedBlock: any
     }
     interaction: {
@@ -394,15 +220,94 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
   }>({
     renderer: null,
     camera: null,
-    materials: { table: null, block: null, lockedBlock: null },
+    materials: { table: null, block: null, block2: null, lockedBlock: null },
     interaction: {
       plane: null,
       selectedBlock: null,
-      mousePos: null, // Will init in initScene
+      mousePos: null,
       offset: null
     },
     lastPhysicsUpdate: 0
   })
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+
+    const init = async () => {
+      try {
+        if (!window.THREE) await loadScript('/js/three.min.js')
+        if (!window.Stats) await loadScript('/js/stats.js')
+        if (!window.Physijs) await loadScript('/js/physi.js')
+        if (!window.THREE.OrbitControls) await loadScript('/js/OrbitControls.js')
+
+        if (window.Physijs) {
+          window.Physijs.scripts.worker = '/js/physijs_worker.js'
+          window.Physijs.scripts.ammo = '/js/ammo.js'
+        }
+
+        setTimeout(() => initScene(), 50)
+
+        const handleResize = () => {
+          const engine = engineRef.current
+          if (engine.renderer && engine.camera && containerRef.current) {
+            const rect = containerRef.current.getBoundingClientRect()
+            engine.camera.aspect = rect.width / rect.height
+            engine.camera.updateProjectionMatrix()
+            engine.renderer.setSize(rect.width, rect.height)
+          }
+        }
+        window.addEventListener('resize', handleResize)
+      } catch (error) {
+        console.error('Error initializing game:', error)
+      }
+    }
+
+    init()
+
+    return () => {
+      workerCheckTimeouts.current.forEach(timeoutId => clearTimeout(timeoutId))
+      workerCheckTimeouts.current.clear()
+
+      if (requestRef.current) cancelAnimationFrame(requestRef.current)
+
+      // Dispose orbit controls
+      if (orbitControlsRef.current) {
+        orbitControlsRef.current.dispose()
+        orbitControlsRef.current = null
+      }
+
+      if (sceneRef.current) {
+        const scene = sceneRef.current as any
+        try {
+          if (sceneUpdateListenerRef.current) {
+            scene.removeEventListener('update', sceneUpdateListenerRef.current)
+            sceneUpdateListenerRef.current = null
+          }
+          while (sceneRef.current.children.length > 0) {
+            sceneRef.current.remove(sceneRef.current.children[0]);
+          }
+          scene.onSimulationResume = function () { }
+        } catch (err) {
+          console.warn('[CLEANUP] Error during scene cleanup:', err)
+        }
+        sceneRef.current = null
+      }
+
+      if (engineRef.current.renderer) {
+        engineRef.current.renderer.dispose()
+        if (engineRef.current.renderer.domElement?.parentNode) {
+          engineRef.current.renderer.domElement.parentNode.removeChild(engineRef.current.renderer.domElement)
+        }
+        engineRef.current.renderer = null
+      }
+
+      blocksRef.current = []
+      scoredBlocksRef.current.clear()
+
+      // Cleanup event listeners
+      cleanupEventHandling()
+    }
+  }, [settings.gameMode, settings.difficulty])
 
   const initScene = function () {
     console.log('[INIT] Starting initScene...')
@@ -411,74 +316,40 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
     engine.interaction.offset = new THREE.Vector3(0, 0, 0)
     engine.lastPhysicsUpdate = Date.now()
 
-    // Reset blocks
     blocksRef.current = []
 
-    // Get the actual container dimensions
     const container = containerRef.current
     if (!container) {
       console.error('[INIT] Container ref not available')
       return
     }
 
-    // Force a reflow and get dimensions with fallbacks
     const containerRect = container.getBoundingClientRect()
     let width = containerRect.width
     let height = containerRect.height
 
-    // Fallback: if dimensions are zero, try to calculate from parent
     if (width === 0 || height === 0) {
-      console.warn('[INIT] Container has zero dimensions, trying fallback calculation...')
-      
-      // Try to get dimensions from offset parent
       let currentElement: HTMLElement | null = container
       let accumulatedHeight = 0
-      
       while (currentElement && currentElement !== document.body) {
         const rect = currentElement.getBoundingClientRect()
+        if (rect.height > 0) accumulatedHeight = Math.max(accumulatedHeight, rect.height)
         const computedStyle = window.getComputedStyle(currentElement)
-        
-        if (rect.height > 0) {
-          accumulatedHeight = Math.max(accumulatedHeight, rect.height)
-        }
-        
-        // Check for explicit height in computed style
         const explicitHeight = computedStyle.height
         if (explicitHeight && explicitHeight !== 'auto' && explicitHeight !== '0px') {
-          const heightValue = parseFloat(explicitHeight)
-          if (heightValue > 0) {
-            accumulatedHeight = Math.max(accumulatedHeight, heightValue)
-          }
+          const h = parseFloat(explicitHeight)
+          if (h > 0) accumulatedHeight = Math.max(accumulatedHeight, h)
         }
-        
         currentElement = currentElement.parentElement
       }
-      
-      // Use viewport height as final fallback
-      if (accumulatedHeight === 0) {
-        accumulatedHeight = window.innerHeight
-      }
-      
-      // Also try to get width from parent or viewport
-      if (width === 0) {
-        width = container.parentElement ? container.parentElement.getBoundingClientRect().width : window.innerWidth
-      }
-      
+      if (accumulatedHeight === 0) accumulatedHeight = window.innerHeight
+      if (width === 0) width = container.parentElement ? container.parentElement.getBoundingClientRect().width : window.innerWidth
       height = accumulatedHeight
-      
-      console.log('[INIT] Fallback dimensions calculated:', width, 'x', height)
     }
 
-    console.log('[INIT] Container dimensions:', width, 'x', height, containerRect)
-
-    // Ensure container has proper dimensions with reasonable defaults
     if (width === 0 || height === 0) {
       initRetryCount.current += 1
-      console.error(`[INIT] Still have zero dimensions after fallback (attempt ${initRetryCount.current}), retrying in 200ms...`)
-      
-      // Add maximum retry limit to prevent infinite loops
       if (initRetryCount.current > 50) {
-        console.error('[INIT] Maximum retry limit reached. Using emergency fallback dimensions.')
         width = window.innerWidth || 800
         height = window.innerHeight || 600
       } else {
@@ -486,8 +357,6 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
         return
       }
     }
-
-    // Reset retry counter on successful initialization
     initRetryCount.current = 0
 
     engine.renderer = new THREE.WebGLRenderer({ antialias: true })
@@ -495,50 +364,38 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
     engine.renderer.setClearColor(0x2c3e50)
     engine.renderer.shadowMap.enabled = true
     engine.renderer.shadowMapSoft = true
-    // Ensure the canvas can receive mouse events
     engine.renderer.domElement.style.pointerEvents = 'auto'
 
-    // Ensure only one canvas
-    while (container.firstChild) {
-      container.removeChild(container.firstChild)
-    }
+    while (container.firstChild) container.removeChild(container.firstChild)
     container.appendChild(engine.renderer.domElement)
 
     const scene = new Physijs.Scene({ fixedTimeStep: 1 / 120 })
     sceneRef.current = scene
     scene.setGravity(new THREE.Vector3(0, -30, 0))
 
-    // Store the listener so we can remove it later
     const sceneUpdateListener = function () {
       engine.lastPhysicsUpdate = Date.now()
 
-      // For solo practice mode, we handle local physics
-      // For server modes, we rely on server updates
       if (settings.gameMode === 'SOLO_PRACTICE' || settings.gameMode === 'SOLO_COMPETITOR') {
-        // Continue local physics simulation
         scene.simulate()
 
-        // Competitor Mode Logic: Scoring and Collapse
         if (settings.gameMode === 'SOLO_COMPETITOR' && !gameOverRef.current) {
           blocksRef.current.forEach((block) => {
-            // Check Scoring: Block moved far from center (removed from tower)
             const dist = Math.sqrt(block.position.x * block.position.x + block.position.z * block.position.z)
 
-            // Only update score if game is NOT over
             if (!gameOverRef.current && dist > 10 && !scoredBlocksRef.current.has(block.id)) {
               scoredBlocksRef.current.add(block.id)
-              setScore(prev => prev + 1)
-              // Reset timer on successful block knock-off (SOLO_COMPETITOR mode)
+              actions.incrementScore()
+              addToast({ type: 'success', message: '+1 Block Scored!' })
               if (settings.gameMode === 'SOLO_COMPETITOR') {
-                setSoloTimeLeft(settings.timerDuration || 30)
+                actions.resetTimer()
               }
             }
 
-            // Check Collapse:
-            // Only trigger if a locked (top) block has fallen significantly (e.g., near the table)
             if (block.userData?.isLocked && block.position.y < 2) {
-              setGameOver(true)
+              actions.endGame(true)
               gameOverRef.current = true
+              addToast({ type: 'error', message: 'Tower Collapsed!' })
             }
           })
         }
@@ -547,26 +404,18 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
 
     sceneUpdateListenerRef.current = sceneUpdateListener
     scene.addEventListener('update', sceneUpdateListener)
-    // console.log('[INIT] Scene update event listener registered') // Removed debug log
 
-    // Start Render Loop
     requestAnimationFrame(render)
 
-    // Enable physics simulation based on game mode - ONLY after worker is ready
     if (settings.gameMode === 'SOLO_PRACTICE' || settings.gameMode === 'SOLO_COMPETITOR') {
-      // console.log('[INIT] Waiting for Physijs worker to be ready...') // Removed debug log
-
-      // Wait for worker to be ready before starting simulation
       const startPhysics = () => {
         if (sceneRef.current) {
-          // Clear all pending checks since we're now starting
           workerCheckTimeouts.current.forEach(timeoutId => clearTimeout(timeoutId))
           workerCheckTimeouts.current.clear()
           sceneRef.current.simulate()
         }
       }
 
-      // Check if worker is ready, if not, wait for it
       const checkWorkerReady = () => {
         const s = sceneRef.current as any
         if (s && s._worker) {
@@ -577,20 +426,27 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
         }
       }
 
-      // Give the scene a moment to create its worker
       const initialTimeoutId = setTimeout(checkWorkerReady, 100)
       workerCheckTimeouts.current.add(initialTimeoutId)
     }
 
-    engine.camera = new THREE.PerspectiveCamera(
-      35,
-      width / height,
-      1,
-      1000
-    )
+    engine.camera = new THREE.PerspectiveCamera(35, width / height, 1, 1000)
     engine.camera.position.set(25, 20, 25)
-    engine.camera.lookAt(new THREE.Vector3(0, 7, 0))
+    engine.camera.lookAt(new THREE.Vector3(...ORBIT_CONFIG.TARGET))
     scene.add(engine.camera)
+
+    // Orbit controls
+    if (window.THREE.OrbitControls) {
+      const controls = new window.THREE.OrbitControls(engine.camera, engine.renderer.domElement)
+      controls.target.set(...ORBIT_CONFIG.TARGET)
+      controls.minDistance = ORBIT_CONFIG.MIN_DISTANCE
+      controls.maxDistance = ORBIT_CONFIG.MAX_DISTANCE
+      controls.minPolarAngle = ORBIT_CONFIG.MIN_POLAR
+      controls.maxPolarAngle = ORBIT_CONFIG.MAX_POLAR
+      controls.enableDamping = true
+      controls.dampingFactor = ORBIT_CONFIG.DAMPING_FACTOR
+      orbitControlsRef.current = controls
+    }
 
     // Lights
     const am_light = new THREE.AmbientLight(0x444444)
@@ -611,51 +467,58 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
     dir_light.shadowDarkness = .5
     scene.add(dir_light)
 
-    // Loader
-    const loader = new THREE.TextureLoader()
-
+    // Procedural wood textures
     const physicsConfig = getPhysicsConfig(settings.difficulty)
 
-    // Materials
-    const woodTexture = loader.load('/images/wood.jpg', undefined, undefined, (err: any) => {
-      console.error('Error loading wood texture:', err)
-    })
+    const woodCanvas = generateWoodTexture({ seed: 42 })
+    const woodTexture = new THREE.CanvasTexture(woodCanvas)
+    woodTexture.wrapS = woodTexture.wrapT = THREE.RepeatWrapping
+    woodTexture.repeat.set(5, 5)
 
     engine.materials.table = Physijs.createMaterial(
       new THREE.MeshLambertMaterial({ map: woodTexture }),
-      physicsConfig.friction, // friction
-      physicsConfig.restitution // restitution
+      physicsConfig.friction,
+      physicsConfig.restitution
     )
-    engine.materials.table.map.wrapS = engine.materials.table.map.wrapT = THREE.RepeatWrapping
-    engine.materials.table.map.repeat.set(5, 5)
 
-    const plywoodTexture = loader.load('/images/plywood.jpg', undefined, undefined, (err: any) => {
-      console.error('Error loading plywood texture:', err)
-    })
+    const plywoodCanvas = generatePlywoodTexture({ seed: 7 })
+    const plywoodTexture = new THREE.CanvasTexture(plywoodCanvas)
+    plywoodTexture.wrapS = plywoodTexture.wrapT = THREE.RepeatWrapping
+    plywoodTexture.repeat.set(1, .5)
 
-    // Standard Block Material
     engine.materials.block = Physijs.createMaterial(
       new THREE.MeshLambertMaterial({ map: plywoodTexture }),
       physicsConfig.friction,
       physicsConfig.restitution
     )
-    engine.materials.block.map.wrapS = engine.materials.block.map.wrapT = THREE.RepeatWrapping
-    engine.materials.block.map.repeat.set(1, .5)
 
-    // Locked Block Material (Darker/Reddish) for top layers
-    engine.materials.lockedBlock = Physijs.createMaterial(
-      new THREE.MeshLambertMaterial({ map: plywoodTexture, color: 0xffaaaa }), // Red tint
+    const plywoodCanvas2 = generatePlywoodTexture({ seed: 13 })
+    const plywoodTexture2 = new THREE.CanvasTexture(plywoodCanvas2)
+    plywoodTexture2.wrapS = plywoodTexture2.wrapT = THREE.RepeatWrapping
+    plywoodTexture2.repeat.set(1, .5)
+
+    engine.materials.block2 = Physijs.createMaterial(
+      new THREE.MeshLambertMaterial({ map: plywoodTexture2 }),
       physicsConfig.friction,
       physicsConfig.restitution
     )
-    engine.materials.lockedBlock.map.wrapS = engine.materials.lockedBlock.map.wrapT = THREE.RepeatWrapping
-    engine.materials.lockedBlock.map.repeat.set(1, .5)
+
+    const lockedPlywoodCanvas = generatePlywoodTexture({ seed: 7, baseColor: '#ee9977' })
+    const lockedPlywoodTexture = new THREE.CanvasTexture(lockedPlywoodCanvas)
+    lockedPlywoodTexture.wrapS = lockedPlywoodTexture.wrapT = THREE.RepeatWrapping
+    lockedPlywoodTexture.repeat.set(1, .5)
+
+    engine.materials.lockedBlock = Physijs.createMaterial(
+      new THREE.MeshLambertMaterial({ map: lockedPlywoodTexture }),
+      physicsConfig.friction,
+      physicsConfig.restitution
+    )
 
     // Table
     const table = new Physijs.BoxMesh(
       new THREE.BoxGeometry(50, 1, 50),
       engine.materials.table,
-      0, // mass
+      0,
       { restitution: physicsConfig.restitution, friction: physicsConfig.friction }
     )
     table.position.y = -.5
@@ -671,21 +534,54 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
     engine.interaction.plane.rotation.x = Math.PI / -2
     scene.add(engine.interaction.plane)
 
-    // Wait a tick to ensure the renderer DOM element is available
-    setTimeout(() => {
-      initEventHandling()
-    }, 0)
-
-    // Physics simulation is handled by the update event listener
+    setTimeout(() => initEventHandling(), 0)
   }
 
   const render = function () {
     requestRef.current = requestAnimationFrame(render)
     if (engineRef.current.renderer && sceneRef.current && engineRef.current.camera) {
+      // Update orbit controls
+      if (orbitControlsRef.current) {
+        orbitControlsRef.current.update()
+      }
+
       engineRef.current.renderer.render(sceneRef.current, engineRef.current.camera)
 
-      // Physics Watchdog
-      // If physics hasn't updated in 4 seconds, restart it
+      // Tower animations
+      const time = performance.now() / 1000
+
+      // Tower sway
+      const sway = getTowerSway(time)
+      blocksRef.current.forEach(block => {
+        if (!block.userData._baseRotY) block.userData._baseRotY = block.rotation.y
+        block.rotation.y = block.userData._baseRotY + sway
+      })
+
+      // Tower wobble
+      if (wobbleRef.current?.active) {
+        const elapsed = (Date.now() - wobbleRef.current.startTime) / 1000
+        const offset = getWobbleOffset(wobbleRef.current, elapsed)
+        blocksRef.current.forEach(block => {
+          if (!block.userData._baseRotZ) block.userData._baseRotZ = block.rotation.z
+          block.rotation.z = block.userData._baseRotZ + offset
+        })
+      }
+
+      // Solo timer (decrement once per second based on performance.now())
+      if (settings.gameMode === 'SOLO_COMPETITOR' && !gameOverRef.current) {
+        const now = performance.now()
+        if (now - lastTimerTickRef.current >= 1000) {
+          const reachedZero = actions.decrementTimer()
+          lastTimerTickRef.current = now
+          if (reachedZero) {
+            actions.endGame(false)
+            gameOverRef.current = true
+            addToast({ type: 'error', message: "Time's up!" })
+          }
+        }
+      }
+
+      // Physics watchdog
       if (settings.gameMode === 'SOLO_PRACTICE' || settings.gameMode === 'SOLO_COMPETITOR') {
         const now = Date.now()
         if (now - engineRef.current.lastPhysicsUpdate > 4000) {
@@ -708,19 +604,15 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
       return
     }
 
-    // Use cached materials if not provided (for reset)
-    const mat = engine.materials.block
-    const lMat = engine.materials.lockedBlock || mat
-
+    const mats = [engine.materials.block, engine.materials.block2].filter(Boolean)
+    const lMat = engine.materials.lockedBlock || engine.materials.block
     const physicsConfig = getPhysicsConfig(settings.difficulty)
-    // console.log('Creating tower with physics config:', physicsConfig) // Removed debug log
 
     for (let i = 0; i < 16; i++) {
-      // Determine if this layer is locked (top 2 layers: 14 and 15)
       const isLocked = settings.gameMode === 'SOLO_COMPETITOR' && i >= 14
-      const currentMat = isLocked ? lMat : mat
 
       for (let j = 0; j < 3; j++) {
+        const currentMat = isLocked ? lMat : mats[(i * 3 + j) % mats.length]
         const block = new Physijs.BoxMesh(block_geometry, currentMat, physicsConfig.mass)
         block.position.y = (block_height / 2) + block_height * i
         if (i % 2 === 0) {
@@ -731,13 +623,8 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
         }
         block.receiveShadow = true
         block.castShadow = true
-
-        // Apply damping
         block.setDamping(physicsConfig.damping, physicsConfig.damping)
-
-        // Store layer info for Competitor Mode
         block.userData = { layer: i, isLocked }
-
         sc.add(block)
         blocksRef.current.push(block)
       }
@@ -755,22 +642,30 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
     blocksRef.current.length = 0
     engine.interaction.selectedBlock = null
     createTower()
-    setFallenCount(0)
-    setScore(0)
-    setGameOver(false)
+
+    actions.resetGame()
     gameOverRef.current = false
-    setGameWon(false)
     scoredBlocksRef.current.clear()
-    setSoloTimeLeft(settings.timerDuration || 30) // Reset timer for SOLO_COMPETITOR
+    wobbleRef.current = null
 
     if (settings.gameMode === 'SOLO_PRACTICE' || settings.gameMode === 'SOLO_COMPETITOR') {
       sc.simulate()
     }
   }
 
+  // Timer effect for SOLO_COMPETITOR - decrement handled in render loop via actions.decrementTimer
+  // This effect handles the timer warning toast
+  useEffect(() => {
+    if (settings.gameMode !== 'SOLO_COMPETITOR') return
+    if (state.timeLeft === 8 && state.timeLeft !== lastTimerWarningRef.current) {
+      addToast({ type: 'warning', message: '8 seconds left!' })
+      lastTimerWarningRef.current = state.timeLeft
+    }
+    if (state.timeLeft <= 6) lastTimerWarningRef.current = 0
+  }, [state.timeLeft, settings.gameMode])
+
   const initEventHandling = function () {
     const engine = engineRef.current
-    // Check if renderer and its DOM element exist
     if (!engine.renderer || !engine.renderer.domElement) {
       console.error('Renderer or renderer DOM element not available')
       return
@@ -788,43 +683,74 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
       return { clientX, clientY }
     }
 
+    // Hover highlight handler
+    const handleMouseMove = function (evt: MouseEvent) {
+      // Skip hover if dragging
+      if (engine.interaction.selectedBlock !== null) return
+
+      // Clear previous hover
+      if (hoveredBlockRef.current) {
+        const prev = hoveredBlockRef.current
+        if (prev.material && prev.userData._hoverOrigEmissive !== undefined) {
+          prev.material.emissive = new THREE.Color(prev.userData._hoverOrigEmissive)
+          prev.material.emissiveIntensity = 0
+          delete prev.userData._hoverOrigEmissive
+        }
+        hoveredBlockRef.current = null
+      }
+
+      // Inline raycasting (same pattern as handleInputStart)
+      const rect = engine.renderer.domElement.getBoundingClientRect()
+      const nx = ((evt.clientX - rect.left) / rect.width) * 2 - 1
+      const ny = -((evt.clientY - rect.top) / rect.height) * 2 + 1
+      const vector = new THREE.Vector3(nx, ny, 1)
+      vector.unproject(engine.camera)
+      const ray = new THREE.Raycaster(engine.camera.position, vector.sub(engine.camera.position).normalize())
+      const hits = ray.intersectObjects(blocksRef.current)
+
+      if (hits.length > 0) {
+        const block = hits[0].object
+        const canMove = !(settings.gameMode === 'SOLO_COMPETITOR' && block.userData?.layer >= 14)
+
+        engine.renderer.domElement.style.cursor = canMove ? 'pointer' : 'not-allowed'
+
+        if (canMove && block.material) {
+          block.userData._hoverOrigEmissive = block.material.emissive ? block.material.emissive.getHex() : 0x000000
+          block.material.emissive = new THREE.Color(0xffe066)
+          block.material.emissiveIntensity = 0.25
+          hoveredBlockRef.current = block
+        }
+      } else {
+        engine.renderer.domElement.style.cursor = 'default'
+      }
+    }
+
     const handleInputStart = function (evt: MouseEvent | TouchEvent) {
-      // Auto-close rules dialog on mobile if user tries to interact
       if (showRulesRef.current) {
-        setShowRules(false)
+        actions.setShowRules(false)
         return
       }
 
-      // Spectator Check - block input if spectating or not your turn
-      if (isSpectator || gameState !== 'ACTIVE' || gameOver) return
-
-      // Multiplayer: only allow input during your turn
+      if (isSpectator || gameState !== 'ACTIVE' || state.gameOver) return
       if (settings.gameMode === 'MULTIPLAYER' && !isCurrentPlayer) return
+      if (evt.type === 'touchstart') evt.preventDefault()
 
-      // Prevent default to stop scrolling on touch devices
-      if (evt.type === 'touchstart') {
-        evt.preventDefault()
-      }
+      // Disable orbit during drag
+      if (orbitControlsRef.current) orbitControlsRef.current.enabled = false
 
       const { clientX, clientY } = getEventPos(evt)
       const rect = engine.renderer.domElement.getBoundingClientRect()
       const nx = ((clientX - rect.left) / rect.width) * 2 - 1
       const ny = -((clientY - rect.top) / rect.height) * 2 + 1
 
-      // Revert to z=1 (far plane) for consistent raycasting
       const vector = new THREE.Vector3(nx, ny, 1)
       vector.unproject(engine.camera)
-
       const ray = new THREE.Raycaster(engine.camera.position, vector.sub(engine.camera.position).normalize())
-
-      // console.log('Raycasting against', blocksRef.current.length, 'blocks') // Removed debug log
       const intersections = ray.intersectObjects(blocksRef.current)
 
       if (intersections.length > 0) {
         const block = intersections[0].object
-        // console.log('Intersection found:', block.id) // Removed debug log
 
-        // Competitor Mode: Prevent selecting top 2 levels (Layers 14 and 15)
         if (settings.gameMode === 'SOLO_COMPETITOR' && block.userData?.layer >= 14) {
           console.warn('Cannot move blocks from top 2 levels!')
           return
@@ -832,40 +758,33 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
 
         engine.interaction.selectedBlock = block
 
-        // Visual feedback: Highlight selected block
         if (showHelpersRef.current && block.material) {
           block.userData.originalEmissive = block.material.emissive ? block.material.emissive.getHex() : 0x000000
           block.material.emissive = new THREE.Color(0x00ff00)
           block.material.emissiveIntensity = 0.3
         }
 
-        // Haptic feedback on mobile
         if (evt.type === 'touchstart' && 'vibrate' in navigator) {
           navigator.vibrate(10)
         }
 
-        // Update intersection plane to match block height
         engine.interaction.plane.position.y = engine.interaction.selectedBlock.position.y
 
         const planeHit = ray.intersectObject(engine.interaction.plane)
         if (planeHit.length > 0) {
-          // console.log('Plane hit at', planeHit[0].point) // Removed debug log
           engine.interaction.mousePos.copy(planeHit[0].point)
           dragStartRef.current = planeHit[0].point.clone()
         } else {
-          // console.log('Plane hit failed') // Removed debug log
           dragStartRef.current = null
         }
-      } else {
-        // console.log('No intersection found') // Removed debug log
       }
     }
 
     const handleInputEnd = function (evt: MouseEvent | TouchEvent) {
-      if (engine.interaction.selectedBlock !== null) {
-        // console.log('Input End. Selected block:', engine.interaction.selectedBlock.id) // Removed debug log
+      // Re-enable orbit
+      if (orbitControlsRef.current) orbitControlsRef.current.enabled = true
 
-        // Remove visual highlight
+      if (engine.interaction.selectedBlock !== null) {
         const block = engine.interaction.selectedBlock
         if (block.material && block.userData.originalEmissive !== undefined) {
           block.material.emissive = new THREE.Color(block.userData.originalEmissive)
@@ -875,28 +794,27 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
 
         const start = dragStartRef.current
         let end = engine.interaction.mousePos.clone()
-        if (start) {
-          end.y = start.y
-        }
+        if (start) end.y = start.y
         const delta = new THREE.Vector3().copy(end).sub(start || engine.interaction.selectedBlock.position)
         delta.y = 0
         const length = delta.length()
-        // console.log('Drag length:', length) // Removed debug log
         const dir = length > 0 ? delta.normalize() : new THREE.Vector3(1, 0, 0)
         const impulse = dir.multiplyScalar(Math.max(5, Math.min(50, length * 10)))
 
-        // Haptic feedback on release (stronger for longer drags)
         if (evt.type === 'touchend' && 'vibrate' in navigator) {
           const vibrationStrength = Math.min(50, Math.max(10, length * 5))
           navigator.vibrate(vibrationStrength)
         }
 
+        // Trigger wobble proportional to pull force
+        const wobbleAmplitude = Math.min(0.02, length * 0.003)
+        if (wobbleAmplitude > 0.002) {
+          wobbleRef.current = createWobble(wobbleAmplitude)
+        }
+
         const blockIndex = blocksRef.current.indexOf(engine.interaction.selectedBlock)
 
         if (settings.gameMode === 'SOLO_PRACTICE' || settings.gameMode === 'SOLO_COMPETITOR') {
-          // console.log('Applying impulse:', impulse, 'to block mass:', block.mass) // Removed debug log
-
-          // Attempt to wake up the block
           if (block.setAngularVelocity) block.setAngularVelocity(new THREE.Vector3(0, 0, 0))
           if (block.setLinearVelocity) block.setLinearVelocity(new THREE.Vector3(0, 0, 0))
 
@@ -915,18 +833,14 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
 
         engine.interaction.selectedBlock = null
         dragStartRef.current = null
-        setDragIndicator(null) // Clear drag indicator
+        actions.setDragIndicator(null)
       }
     }
 
     const handleInputMove = function (evt: MouseEvent | TouchEvent) {
-      // Prevent default to stop scrolling on touch devices
-      if (evt.type === 'touchmove') {
-        evt.preventDefault()
-      }
+      if (evt.type === 'touchmove') evt.preventDefault()
 
       if (engine.interaction.selectedBlock !== null) {
-        // console.log('Input Move. Selected block:', engine.interaction.selectedBlock.id) // Removed debug log
         const { clientX, clientY } = getEventPos(evt)
         const rect = engine.renderer.domElement.getBoundingClientRect()
         const nx = ((clientX - rect.left) / rect.width) * 2 - 1
@@ -934,17 +848,14 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
 
         const vector = new THREE.Vector3(nx, ny, 1)
         vector.unproject(engine.camera)
-
         const ray = new THREE.Raycaster(engine.camera.position, vector.sub(engine.camera.position).normalize())
 
-        // Ensure plane is at correct height
         engine.interaction.plane.position.y = engine.interaction.selectedBlock.position.y
 
         const intersection = ray.intersectObject(engine.interaction.plane)
         if (intersection.length > 0) {
           engine.interaction.mousePos.copy(intersection[0].point)
 
-          // Update drag indicator for visual feedback
           if (showHelpersRef.current && dragStartRef.current) {
             const start = dragStartRef.current
             const end = engine.interaction.mousePos.clone()
@@ -954,21 +865,18 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
             const length = delta.length()
             const angle = Math.atan2(delta.z, delta.x) * (180 / Math.PI)
 
-            // Convert 3D position to screen coordinates for overlay
             const screenStart = start.clone().project(engine.camera)
             const screenX = (screenStart.x + 1) / 2 * rect.width
             const screenY = (1 - screenStart.y) / 2 * rect.height
 
-            setDragIndicator({ x: screenX, y: screenY, length: length * 20, angle })
+            actions.setDragIndicator({ x: screenX, y: screenY, length: length * 20, angle })
           }
         }
       }
     }
 
-    // Old handleInputEnd removed
-
-
     // Mouse events
+    engine.renderer.domElement.addEventListener('mousemove', handleMouseMove)
     engine.renderer.domElement.addEventListener('mousedown', handleInputStart)
     engine.renderer.domElement.addEventListener('mousemove', handleInputMove)
     engine.renderer.domElement.addEventListener('mouseup', handleInputEnd)
@@ -977,81 +885,95 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
     engine.renderer.domElement.addEventListener('touchstart', handleInputStart, { passive: false })
     engine.renderer.domElement.addEventListener('touchmove', handleInputMove, { passive: false })
     engine.renderer.domElement.addEventListener('touchend', handleInputEnd)
+
+    // Store handlers for cleanup
+    eventHandlersRef.current = {
+      handleMouseMove,
+      handleInputStart,
+      handleInputMove,
+      handleInputEnd
+    }
   }
+
+  // Cleanup function for event listeners
+  const cleanupEventHandling = function () {
+    const engine = engineRef.current
+    const handlers = eventHandlersRef.current
+
+    if (engine.renderer && engine.renderer.domElement && handlers.handleMouseMove) {
+      engine.renderer.domElement.removeEventListener('mousemove', handlers.handleMouseMove)
+      engine.renderer.domElement.removeEventListener('mousedown', handlers.handleInputStart!)
+      engine.renderer.domElement.removeEventListener('mousemove', handlers.handleInputMove!)
+      engine.renderer.domElement.removeEventListener('mouseup', handlers.handleInputEnd!)
+      engine.renderer.domElement.removeEventListener('touchstart', handlers.handleInputStart!)
+      engine.renderer.domElement.removeEventListener('touchmove', handlers.handleInputMove!)
+      engine.renderer.domElement.removeEventListener('touchend', handlers.handleInputEnd!)
+    }
+
+    eventHandlersRef.current = {
+      handleMouseMove: null,
+      handleInputStart: null,
+      handleInputMove: null,
+      handleInputEnd: null
+    }
+  }
+
+  // Timer handled in render loop for solo, serverTimeLeft for multiplayer
+  const timeLeft = state.timeLeft
 
   return (
     <div className="relative w-full h-full game-container">
-      {/* Game UI Overlay - positioned above canvas */}
+      {/* Game UI Overlay */}
       <div className="absolute inset-0 z-10 pointer-events-none">
         <GameUI
-        state={{
-          status: gameOver ? 'ENDED' : gameState,
-          gameOver,
-          towerCollapsed,
-          score,
-          fallenCount,
-          potSize,
-          survivors,
-          showRules,
-          showHelpers,
-          dragIndicator,
-          timeLeft: timeLeft ?? 30,
-          now: Date.now(),
-        }}
-        players={players}
-        currentPlayerId={currentPlayerId}
-        maxPlayers={settings.gameMode === 'MULTIPLAYER' ? settings.playerCount :
-          settings.gameMode === 'SINGLE_VS_AI' ? (settings.aiOpponentCount || 1) + 1 : 1}
-        difficulty={settings.difficulty}
-        stake={settings.stake}
-        gameMode={settings.gameMode}
-        highScore={highScore}
-        onJoin={() => {
-          if (settings.gameMode === 'MULTIPLAYER') {
-            joinGame()
-            setHasJoinedGame(true)
-          } else {
-            // Try contract first for other modes
-            try {
-              contractJoin()
-            } catch (e) {
-              console.error(e)
+          state={state}
+          players={players}
+          currentPlayerId={currentPlayerId}
+          maxPlayers={settings.gameMode === 'MULTIPLAYER' ? settings.playerCount :
+            settings.gameMode === 'SINGLE_VS_AI' ? (settings.aiOpponentCount || 1) + 1 : 1}
+          difficulty={settings.difficulty}
+          stake={settings.stake}
+          gameMode={settings.gameMode}
+          highScore={highScore}
+          onJoin={() => {
+            if (settings.gameMode === 'MULTIPLAYER') {
+              joinGame()
+            } else {
+              try { contractJoin() } catch (e) { console.error(e) }
             }
-          }
-        }}
-        onReload={() => {
-          if (settings.gameMode === 'SOLO_PRACTICE' || settings.gameMode === 'SOLO_COMPETITOR') {
-            resetTower()
-          } else {
-            contractReload()
-            setPotSize(prev => prev + 1)
-          }
-        }}
-        onVote={(split) => {
-          alert(`Voted to ${split ? 'Split' : 'Continue'}`)
-          // TODO: Emit vote to server
-        }}
-        onExit={onExit}
-        setShowRules={setShowRules}
-        setShowHelpers={setShowHelpers}
-      />
+          }}
+          onReload={() => {
+            if (settings.gameMode === 'SOLO_PRACTICE' || settings.gameMode === 'SOLO_COMPETITOR') {
+              resetTower()
+            } else {
+              contractReload()
+              actions.setPotSize(prev => (prev as number) + 1)
+            }
+          }}
+          onVote={(split) => {
+            alert(`Voted to ${split ? 'Split' : 'Continue'}`)
+          }}
+          onExit={onExit}
+          setShowRules={actions.setShowRules}
+          setShowHelpers={actions.setShowHelpers}
+        />
       </div>
 
-      {/* Game Over Overlay - Unified for all modes */}
-      {gameOver && (
+      {/* Game Over Overlay */}
+      {state.gameOver && (
         <GameOver
-          survivors={settings.gameMode === 'SOLO_COMPETITOR' ? 
-            [{ address: 'You', isWinner: true }] : 
-            survivors
+          survivors={settings.gameMode === 'SOLO_COMPETITOR' ?
+            [{ address: 'You', isWinner: true }] :
+            state.survivors
           }
-          status={towerCollapsed ? 'COLLAPSED' : 'ENDED'}
+          status={state.towerCollapsed ? 'COLLAPSED' : 'ENDED'}
           activePlayers={settings.gameMode === 'MULTIPLAYER' ? serverState?.activePlayers || [] : []}
           userAddress={address}
-          potSize={potSize}
+          potSize={state.potSize}
           onExit={onExit}
-          mode={settings.gameMode === 'SOLO_COMPETITOR' ? 'SOLO_COMPETITOR' : 
-                settings.gameMode === 'SOLO_PRACTICE' ? 'SOLO_PRACTICE' : 'MULTIPLAYER'}
-          score={score}
+          mode={settings.gameMode === 'SOLO_COMPETITOR' ? 'SOLO_COMPETITOR' :
+            settings.gameMode === 'SOLO_PRACTICE' ? 'SOLO_PRACTICE' : 'MULTIPLAYER'}
+          score={state.score}
           highScore={highScore}
           rank={rank}
           totalPlayers={totalPlayers}
@@ -1060,22 +982,22 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
           isPending={isSubmitting}
           isConfirming={isConfirmingScore}
           isConfirmed={isScoreConfirmed}
-          onSubmitScore={address ? () => submitScore(settings.difficulty, score) : undefined}
+          onSubmitScore={address ? () => submitScore(settings.difficulty, state.score) : undefined}
         />
       )}
 
-      {/* Spectator Overlay (Multiplayer) */}
-      {settings.gameMode === 'MULTIPLAYER' && isSpectator && !gameOver && (
+      {/* Spectator Overlay */}
+      {settings.gameMode === 'MULTIPLAYER' && isSpectator && !state.gameOver && (
         <SpectatorOverlay
           currentPlayer={serverState?.currentPlayer || null}
           players={players}
           timeLeft={timeLeft}
-          isCollapsed={towerCollapsed}
+          isCollapsed={state.towerCollapsed}
         />
       )}
 
-
-
+      {/* Toast Notifications */}
+      <ToastContainer toasts={toasts} onDismiss={dismissToast} />
 
       {/* Transaction Status Indicator */}
       {(isPending || isConfirming) && (
@@ -1084,30 +1006,28 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
         </div>
       )}
 
-      {/* Drag Indicator Overlay for Mobile Feedback */}
-      {dragIndicator && (
+      {/* Drag Indicator Overlay */}
+      {state.dragIndicator && (
         <div
           className="absolute pointer-events-none z-40"
           style={{
-            left: `${dragIndicator.x}px`,
-            top: `${dragIndicator.y}px`,
+            left: `${state.dragIndicator.x}px`,
+            top: `${state.dragIndicator.y}px`,
             transform: 'translate(-50%, -50%)'
           }}
         >
-          {/* Drag arrow */}
           <div
             className="relative"
             style={{
-              width: `${Math.min(dragIndicator.length, 150)}px`,
+              width: `${Math.min(state.dragIndicator.length, 150)}px`,
               height: '4px',
               background: 'linear-gradient(90deg, rgba(34,197,94,0.8) 0%, rgba(34,197,94,0.3) 100%)',
-              transform: `rotate(${-dragIndicator.angle}deg)`,
+              transform: `rotate(${-state.dragIndicator.angle}deg)`,
               transformOrigin: 'left center',
               borderRadius: '2px',
               boxShadow: '0 0 10px rgba(34,197,94,0.5)'
             }}
           >
-            {/* Arrowhead */}
             <div
               className="absolute right-0 top-1/2 -translate-y-1/2"
               style={{
@@ -1120,27 +1040,24 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
               }}
             />
           </div>
-          {/* Power indicator */}
           <div className="absolute -bottom-8 left-1/2 -translate-x-1/2 bg-black/70 text-white text-xs px-2 py-1 rounded whitespace-nowrap backdrop-blur-sm">
-            {Math.round(Math.min(dragIndicator.length / 3, 50))}% Power
+            {Math.round(Math.min(state.dragIndicator.length / 3, 50))}% Power
           </div>
         </div>
       )}
 
-      {/* Game Canvas Container - positioned absolutely behind UI */}
-      <div 
-        ref={containerRef} 
-        className="absolute inset-0 bg-gradient-to-br from-slate-900 via-slate-800 to-black overflow-hidden" 
-        style={{ 
+      {/* Game Canvas Container */}
+      <div
+        ref={containerRef}
+        className="absolute inset-0 bg-gradient-to-br from-slate-900 via-slate-800 to-black overflow-hidden"
+        style={{
           pointerEvents: 'auto',
           touchAction: 'none',
           WebkitUserSelect: 'none',
           userSelect: 'none',
           zIndex: 0
         }}
-      >
-        {/* Canvas will be appended here by initScene */}
-      </div>
+      />
     </div>
   )
 }

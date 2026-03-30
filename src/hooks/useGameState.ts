@@ -9,7 +9,7 @@
  * This hook consolidates ~15 useState calls from Game.tsx into a unified state machine
  */
 
-import { useState, useMemo, useCallback, useRef } from 'react';
+import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { GameSettingsConfig } from '@/components/GameSettings';
 import { GAME_MODES, TOWER_CONFIG } from '@/config';
 import type { GameState as ServerGameState } from './useGameSocket';
@@ -118,21 +118,47 @@ export function useGameState(
   const [survivors, setSurvivorsState] = useState<Survivor[]>([]);
   
   // UI state
-  const [showRules, setShowRulesState] = useState(false);
+  const [showRules, setShowRulesState] = useState(isSolo);
   const [showHelpers, setShowHelpersState] = useState(settings.showHelpers);
   const [dragIndicator, setDragIndicatorState] = useState<DragIndicator | null>(null);
   
   // Timer state (for SOLO_COMPETITOR)
-  const initialTime = isSoloCompetitor 
-    ? (GAME_MODES.SOLO_COMPETITOR.timerSeconds ?? 30)
+  const initialTime = isSoloCompetitor
+    ? (settings.timerDuration || (GAME_MODES.SOLO_COMPETITOR.timerSeconds ?? 30))
     : 30;
   const [soloTimeLeft, setSoloTimeLeft] = useState<number>(initialTime);
+  const soloTimeLeftRef = useRef<number>(initialTime);
   
   // Animation timestamp
   const [now, setNow] = useState(Date.now());
   
   // Refs for timer interval cleanup
   const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Sync multiplayer state from server
+  useEffect(() => {
+    if (!isMultiplayer || !serverState) return;
+
+    if (serverState.status === 'COLLAPSED') {
+      setTowerCollapsed(true);
+      setGameOver(true);
+      const survivorList = serverState.activePlayers?.map((addr: string) => ({
+        address: addr,
+        isWinner: false,
+      })) || [];
+      if (survivorList.length > 0) survivorList[0].isWinner = true;
+      setSurvivorsState(survivorList);
+    }
+
+    if (serverState.status === 'ENDED') {
+      setGameOver(true);
+      const survivorList = serverState.activePlayers?.map((addr: string) => ({
+        address: addr,
+        isWinner: true,
+      })) || [];
+      setSurvivorsState(survivorList);
+    }
+  }, [isMultiplayer, serverState?.status, serverState?.activePlayers]);
   
   // Derived status
   const status: GameStatus = useMemo(() => {
@@ -179,6 +205,7 @@ export function useGameState(
     setTowerCollapsed(false);
     setScore(0);
     setFallenCount(0);
+    soloTimeLeftRef.current = initialTime;
     setSoloTimeLeft(initialTime);
     setSurvivorsState([]);
     setDragIndicatorState(null);
@@ -197,18 +224,18 @@ export function useGameState(
   }, []);
   
   const decrementTimer = useCallback((): boolean => {
-    let reachedZero = false;
-    setSoloTimeLeft(prev => {
-      if (prev <= 1) {
-        reachedZero = true;
-        return 0;
-      }
-      return prev - 1;
-    });
-    return reachedZero;
+    if (soloTimeLeftRef.current <= 1) {
+      soloTimeLeftRef.current = 0;
+      setSoloTimeLeft(0);
+      return true;
+    }
+    soloTimeLeftRef.current -= 1;
+    setSoloTimeLeft(soloTimeLeftRef.current);
+    return false;
   }, []);
   
   const resetTimer = useCallback(() => {
+    soloTimeLeftRef.current = initialTime;
     setSoloTimeLeft(initialTime);
   }, [initialTime]);
   

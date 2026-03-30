@@ -1,12 +1,8 @@
 /**
  * Physics Helpers
  * 
- * This file is kept for backward compatibility.
- * New code should import directly from '@/lib/physicsEngine' or '@/config'.
- * 
- * Following Core Principles:
- * - AGGRESSIVE CONSOLIDATION: This file will be removed in a future cleanup
- * - DRY: All physics config now comes from centralized config
+ * Provides loadScript for dynamic script loading.
+ * Physics config re-exported from centralized '@/config/game'.
  */
 
 import { 
@@ -40,14 +36,3 @@ export const loadScript = (src: string): Promise<void> => {
     })
 }
 
-// Re-export PhysicsEngine for new code
-export { PhysicsEngine, createPhysicsEngine } from '@/lib/physicsEngine'
-export type { 
-  Vector3, 
-  BlockData, 
-  PhysicsState, 
-  RaycastHit,
-  PhysicsEngineConfig,
-  DragState,
-  PhysicsEventCallback 
-} from '@/lib/physicsEngine'
