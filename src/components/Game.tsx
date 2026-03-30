@@ -30,6 +30,8 @@ import { useGameSocket } from '../hooks/useGameSocket'
 import { useLeaderboard } from '../hooks/useLeaderboard'
 import { useGameState } from '../hooks/useGameState'
 import { useToast } from '../hooks/useToast'
+import { useRenderLoop } from '../hooks/useRenderLoop'
+import { useInputHandling } from '../hooks/useInputHandling'
 
 interface GameProps {
   settings: GameSettingsConfig
@@ -104,7 +106,6 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
   const dragStartRef = useRef<any>(null)
   const sceneRef = useRef<any>(null)
   const scoredBlocksRef = useRef<Set<number>>(new Set())
-  const requestRef = useRef<number | undefined>(undefined)
   const workerCheckTimeouts = useRef<Set<NodeJS.Timeout>>(new Set())
   const sceneUpdateListenerRef = useRef<any>(null)
   const initRetryCount = useRef<number>(0)
@@ -360,7 +361,7 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
     sceneUpdateListenerRef.current = sceneUpdateListener
     scene.addEventListener('update', sceneUpdateListener)
 
-    requestAnimationFrame(render)
+    startRenderLoop()
 
     if (settings.gameMode === 'SOLO_PRACTICE' || settings.gameMode === 'SOLO_COMPETITOR') {
       const startPhysics = () => {
@@ -492,61 +493,43 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
     setTimeout(() => initEventHandling(), 0)
   }
 
-  const render = function () {
-    requestRef.current = requestAnimationFrame(render)
-    if (engineRef.current.renderer && sceneRef.current && engineRef.current.camera) {
-      // Update orbit controls
-      if (orbitControlsRef.current) {
-        orbitControlsRef.current.update()
-      }
+  // Render loop hook
+  const { requestRef, startRenderLoop, stopRenderLoop } = useRenderLoop({
+    engineRef,
+    sceneRef,
+    blocksRef,
+    wobbleRef,
+    orbitControlsRef,
+    gameOverRef,
+    lastTimerTickRef,
+    gameMode: settings.gameMode,
+    decrementTimer: actions.decrementTimer,
+    endGame: actions.endGame,
+    addToast,
+  })
 
-      engineRef.current.renderer.render(sceneRef.current, engineRef.current.camera)
-
-      // Tower animations
-      const time = performance.now() / 1000
-
-      // Tower sway
-      const sway = getTowerSway(time)
-      blocksRef.current.forEach(block => {
-        if (!block.userData._baseRotY) block.userData._baseRotY = block.rotation.y
-        block.rotation.y = block.userData._baseRotY + sway
-      })
-
-      // Tower wobble
-      if (wobbleRef.current?.active) {
-        const elapsed = (Date.now() - wobbleRef.current.startTime) / 1000
-        const offset = getWobbleOffset(wobbleRef.current, elapsed)
-        blocksRef.current.forEach(block => {
-          if (!block.userData._baseRotZ) block.userData._baseRotZ = block.rotation.z
-          block.rotation.z = block.userData._baseRotZ + offset
-        })
-      }
-
-      // Solo timer (decrement once per second based on performance.now())
-      if (settings.gameMode === 'SOLO_COMPETITOR' && !gameOverRef.current) {
-        const now = performance.now()
-        if (now - lastTimerTickRef.current >= 1000) {
-          const reachedZero = actions.decrementTimer()
-          lastTimerTickRef.current = now
-          if (reachedZero) {
-            actions.endGame(false)
-            gameOverRef.current = true
-            addToast({ type: 'error', message: "Time's up!" })
-          }
-        }
-      }
-
-      // Physics watchdog
-      if (settings.gameMode === 'SOLO_PRACTICE' || settings.gameMode === 'SOLO_COMPETITOR') {
-        const now = Date.now()
-        if (now - engineRef.current.lastPhysicsUpdate > 4000) {
-          console.warn('Physics stalled (>4s), restarting simulation...')
-          engineRef.current.lastPhysicsUpdate = now
-          sceneRef.current.simulate()
-        }
-      }
-    }
-  }
+  // Input handling hook
+  const { initEventHandling, cleanupEventHandling } = useInputHandling({
+    engineRef,
+    blocksRef,
+    orbitControlsRef,
+    hoveredBlockRef,
+    dragStartRef,
+    wobbleRef,
+    socketRef,
+    eventHandlersRef,
+    aiTurnRef,
+    gameMode: settings.gameMode,
+    gameState,
+    isSpectator,
+    isCurrentPlayer,
+    isGameOver: state.gameOver,
+    showRulesRef,
+    showHelpersRef,
+    setShowRules: actions.setShowRules,
+    setDragIndicator: actions.setDragIndicator,
+    executeAIMove,
+  })
 
   const createTower = function () {
     const block_length = 6, block_height = 1, block_width = 1.5, block_offset = 2
@@ -672,273 +655,6 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
     }
     if (state.timeLeft <= 6) lastTimerWarningRef.current = 0
   }, [state.timeLeft, settings.gameMode])
-
-  const initEventHandling = function () {
-    const engine = engineRef.current
-    if (!engine.renderer || !engine.renderer.domElement) {
-      console.error('Renderer or renderer DOM element not available')
-      return
-    }
-
-    const getEventPos = (evt: MouseEvent | TouchEvent) => {
-      let clientX, clientY
-      if ((evt as TouchEvent).changedTouches && (evt as TouchEvent).changedTouches.length > 0) {
-        clientX = (evt as TouchEvent).changedTouches[0].clientX
-        clientY = (evt as TouchEvent).changedTouches[0].clientY
-      } else {
-        clientX = (evt as MouseEvent).clientX
-        clientY = (evt as MouseEvent).clientY
-      }
-      return { clientX, clientY }
-    }
-
-    // Hover highlight handler
-    const handleMouseMove = function (evt: MouseEvent) {
-      // Skip hover if dragging
-      if (engine.interaction.selectedBlock !== null) return
-
-      // Clear previous hover
-      if (hoveredBlockRef.current) {
-        const prev = hoveredBlockRef.current
-        if (prev.material && prev.userData._hoverOrigEmissive !== undefined) {
-          prev.material.emissive = new THREE.Color(prev.userData._hoverOrigEmissive)
-          prev.material.emissiveIntensity = 0
-          delete prev.userData._hoverOrigEmissive
-        }
-        hoveredBlockRef.current = null
-      }
-
-      // Inline raycasting (same pattern as handleInputStart)
-      const rect = engine.renderer.domElement.getBoundingClientRect()
-      const nx = ((evt.clientX - rect.left) / rect.width) * 2 - 1
-      const ny = -((evt.clientY - rect.top) / rect.height) * 2 + 1
-      const vector = new THREE.Vector3(nx, ny, 1)
-      vector.unproject(engine.camera)
-      const ray = new THREE.Raycaster(engine.camera.position, vector.sub(engine.camera.position).normalize())
-      const hits = ray.intersectObjects(blocksRef.current)
-
-      if (hits.length > 0) {
-        const block = hits[0].object
-        const canMove = !(settings.gameMode === 'SOLO_COMPETITOR' && block.userData?.layer >= 14)
-
-        engine.renderer.domElement.style.cursor = canMove ? 'pointer' : 'not-allowed'
-
-        if (canMove && block.material) {
-          block.userData._hoverOrigEmissive = block.material.emissive ? block.material.emissive.getHex() : 0x000000
-          block.material.emissive = new THREE.Color(0xffe066)
-          block.material.emissiveIntensity = 0.25
-          hoveredBlockRef.current = block
-        }
-      } else {
-        engine.renderer.domElement.style.cursor = 'default'
-      }
-    }
-
-    const handleInputStart = function (evt: MouseEvent | TouchEvent) {
-      if (showRulesRef.current) {
-        actions.setShowRules(false)
-        return
-      }
-
-      if (isSpectator || gameState !== 'ACTIVE' || state.gameOver) return
-      if (settings.gameMode === 'MULTIPLAYER' && !isCurrentPlayer) return
-      if (settings.gameMode === 'SINGLE_VS_AI' && aiTurnRef.current) return
-      if (evt.type === 'touchstart') evt.preventDefault()
-
-      // Disable orbit during drag
-      if (orbitControlsRef.current) orbitControlsRef.current.enabled = false
-
-      const { clientX, clientY } = getEventPos(evt)
-      const rect = engine.renderer.domElement.getBoundingClientRect()
-      const nx = ((clientX - rect.left) / rect.width) * 2 - 1
-      const ny = -((clientY - rect.top) / rect.height) * 2 + 1
-
-      const vector = new THREE.Vector3(nx, ny, 1)
-      vector.unproject(engine.camera)
-      const ray = new THREE.Raycaster(engine.camera.position, vector.sub(engine.camera.position).normalize())
-      const intersections = ray.intersectObjects(blocksRef.current)
-
-      if (intersections.length > 0) {
-        const block = intersections[0].object
-
-        if (settings.gameMode === 'SOLO_COMPETITOR' && block.userData?.layer >= 14) {
-          console.warn('Cannot move blocks from top 2 levels!')
-          return
-        }
-
-        engine.interaction.selectedBlock = block
-
-        if (showHelpersRef.current && block.material) {
-          block.userData.originalEmissive = block.material.emissive ? block.material.emissive.getHex() : 0x000000
-          block.material.emissive = new THREE.Color(0x00ff00)
-          block.material.emissiveIntensity = 0.3
-        }
-
-        if (evt.type === 'touchstart' && 'vibrate' in navigator) {
-          navigator.vibrate(10)
-        }
-
-        engine.interaction.plane.position.y = engine.interaction.selectedBlock.position.y
-
-        const planeHit = ray.intersectObject(engine.interaction.plane)
-        if (planeHit.length > 0) {
-          engine.interaction.mousePos.copy(planeHit[0].point)
-          dragStartRef.current = planeHit[0].point.clone()
-        } else {
-          dragStartRef.current = null
-        }
-      }
-    }
-
-    const handleInputEnd = function (evt: MouseEvent | TouchEvent) {
-      // Re-enable orbit
-      if (orbitControlsRef.current) orbitControlsRef.current.enabled = true
-
-      if (engine.interaction.selectedBlock !== null) {
-        const block = engine.interaction.selectedBlock
-        if (block.material && block.userData.originalEmissive !== undefined) {
-          block.material.emissive = new THREE.Color(block.userData.originalEmissive)
-          block.material.emissiveIntensity = 0
-          delete block.userData.originalEmissive
-        }
-
-        const start = dragStartRef.current
-        let end = engine.interaction.mousePos.clone()
-        if (start) end.y = start.y
-        const delta = new THREE.Vector3().copy(end).sub(start || engine.interaction.selectedBlock.position)
-        delta.y = 0
-        const length = delta.length()
-        const dir = length > 0 ? delta.normalize() : new THREE.Vector3(1, 0, 0)
-        const impulse = dir.multiplyScalar(Math.max(5, Math.min(50, length * 10)))
-
-        if (evt.type === 'touchend' && 'vibrate' in navigator) {
-          const vibrationStrength = Math.min(50, Math.max(10, length * 5))
-          navigator.vibrate(vibrationStrength)
-        }
-
-        // Trigger wobble proportional to pull force
-        const wobbleAmplitude = Math.min(0.02, length * 0.003)
-        if (wobbleAmplitude > 0.002) {
-          wobbleRef.current = createWobble(wobbleAmplitude)
-        }
-
-        const blockIndex = blocksRef.current.indexOf(engine.interaction.selectedBlock)
-
-        if (settings.gameMode === 'SOLO_PRACTICE' || settings.gameMode === 'SOLO_COMPETITOR') {
-          if (block.setAngularVelocity) block.setAngularVelocity(new THREE.Vector3(0, 0, 0))
-          if (block.setLinearVelocity) block.setLinearVelocity(new THREE.Vector3(0, 0, 0))
-
-          if (typeof block.applyCentralImpulse === 'function') {
-            block.applyCentralImpulse(impulse)
-          } else {
-            block.applyCentralForce(impulse)
-          }
-        } else if (settings.gameMode === 'SINGLE_VS_AI') {
-          // Apply human move locally, then trigger AI response
-          if (block.setAngularVelocity) block.setAngularVelocity(new THREE.Vector3(0, 0, 0))
-          if (block.setLinearVelocity) block.setLinearVelocity(new THREE.Vector3(0, 0, 0))
-
-          if (typeof block.applyCentralImpulse === 'function') {
-            block.applyCentralImpulse(impulse)
-          } else {
-            block.applyCentralForce(impulse)
-          }
-
-          executeAIMove()
-        } else if (socketRef.current && blockIndex !== -1) {
-          socketRef.current.emit('submitMove', {
-            blockIndex: blockIndex,
-            force: { x: impulse.x, y: impulse.y, z: impulse.z },
-            point: { x: engine.interaction.selectedBlock.position.x, y: engine.interaction.selectedBlock.position.y, z: engine.interaction.selectedBlock.position.z }
-          })
-        }
-
-        engine.interaction.selectedBlock = null
-        dragStartRef.current = null
-        actions.setDragIndicator(null)
-      }
-    }
-
-    const handleInputMove = function (evt: MouseEvent | TouchEvent) {
-      if (evt.type === 'touchmove') evt.preventDefault()
-
-      if (engine.interaction.selectedBlock !== null) {
-        const { clientX, clientY } = getEventPos(evt)
-        const rect = engine.renderer.domElement.getBoundingClientRect()
-        const nx = ((clientX - rect.left) / rect.width) * 2 - 1
-        const ny = -((clientY - rect.top) / rect.height) * 2 + 1
-
-        const vector = new THREE.Vector3(nx, ny, 1)
-        vector.unproject(engine.camera)
-        const ray = new THREE.Raycaster(engine.camera.position, vector.sub(engine.camera.position).normalize())
-
-        engine.interaction.plane.position.y = engine.interaction.selectedBlock.position.y
-
-        const intersection = ray.intersectObject(engine.interaction.plane)
-        if (intersection.length > 0) {
-          engine.interaction.mousePos.copy(intersection[0].point)
-
-          if (showHelpersRef.current && dragStartRef.current) {
-            const start = dragStartRef.current
-            const end = engine.interaction.mousePos.clone()
-            end.y = start.y
-            const delta = new THREE.Vector3().copy(end).sub(start)
-            delta.y = 0
-            const length = delta.length()
-            const angle = Math.atan2(delta.z, delta.x) * (180 / Math.PI)
-
-            const screenStart = start.clone().project(engine.camera)
-            const screenX = (screenStart.x + 1) / 2 * rect.width
-            const screenY = (1 - screenStart.y) / 2 * rect.height
-
-            actions.setDragIndicator({ x: screenX, y: screenY, length: length * 20, angle })
-          }
-        }
-      }
-    }
-
-    // Mouse events
-    engine.renderer.domElement.addEventListener('mousemove', handleMouseMove)
-    engine.renderer.domElement.addEventListener('mousedown', handleInputStart)
-    engine.renderer.domElement.addEventListener('mousemove', handleInputMove)
-    engine.renderer.domElement.addEventListener('mouseup', handleInputEnd)
-
-    // Touch events
-    engine.renderer.domElement.addEventListener('touchstart', handleInputStart, { passive: false })
-    engine.renderer.domElement.addEventListener('touchmove', handleInputMove, { passive: false })
-    engine.renderer.domElement.addEventListener('touchend', handleInputEnd)
-
-    // Store handlers for cleanup
-    eventHandlersRef.current = {
-      handleMouseMove,
-      handleInputStart,
-      handleInputMove,
-      handleInputEnd
-    }
-  }
-
-  // Cleanup function for event listeners
-  const cleanupEventHandling = function () {
-    const engine = engineRef.current
-    const handlers = eventHandlersRef.current
-
-    if (engine.renderer && engine.renderer.domElement && handlers.handleMouseMove) {
-      engine.renderer.domElement.removeEventListener('mousemove', handlers.handleMouseMove)
-      engine.renderer.domElement.removeEventListener('mousedown', handlers.handleInputStart!)
-      engine.renderer.domElement.removeEventListener('mousemove', handlers.handleInputMove!)
-      engine.renderer.domElement.removeEventListener('mouseup', handlers.handleInputEnd!)
-      engine.renderer.domElement.removeEventListener('touchstart', handlers.handleInputStart!)
-      engine.renderer.domElement.removeEventListener('touchmove', handlers.handleInputMove!)
-      engine.renderer.domElement.removeEventListener('touchend', handlers.handleInputEnd!)
-    }
-
-    eventHandlersRef.current = {
-      handleMouseMove: null,
-      handleInputStart: null,
-      handleInputMove: null,
-      handleInputEnd: null
-    }
-  }
 
   // Timer handled in render loop for solo, serverTimeLeft for multiplayer
   const timeLeft = state.timeLeft
