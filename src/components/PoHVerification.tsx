@@ -3,6 +3,7 @@
 import React from 'react'
 import { usePoHVerification } from '../hooks/usePoHVerification'
 import { useAccount } from 'wagmi'
+import { lineaSepolia } from 'wagmi/chains'
 
 interface PoHVerificationProps {
   onVerified?: () => void
@@ -16,9 +17,11 @@ export default function PoHVerification({
   compact = false,
 }: PoHVerificationProps) {
   const { isVerified, isVerifying, isChecking, error, initiatePoHVerification } = usePoHVerification()
-  const { isConnected } = useAccount()
+  const { isConnected, chainId } = useAccount()
 
-  if (!isConnected) {
+  const isLinea = chainId === lineaSepolia.id
+
+  if (!isConnected || !isLinea) {
     return null
   }
 

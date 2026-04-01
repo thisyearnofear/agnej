@@ -106,3 +106,9 @@ export function getAddressExplorerUrl(chainId: number, address: string): string 
   const baseUrl = EXPLORER_URLS[chainId] || EXPLORER_URLS[lineaSepolia.id]
   return `${baseUrl}/address/${address}`
 }
+
+/** Get native currency symbol for a chain */
+export function getChainCurrency(chainId: number): string {
+  const chain = SUPPORTED_CHAINS.find(c => c.id === chainId)
+  return chain?.nativeCurrency.symbol || 'ETH'
+}

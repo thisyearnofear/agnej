@@ -21,10 +21,14 @@ npx hardhat run scripts/deploy.ts --network linea
 - **Leaderboard:** `0x5758c5551FFAabbAD966B2d6C26dc9E21137D681`
 - **HouseOfCards:** `0xd21F62a37C2A72d0993dE6273Cb2eb830e53Fcd4`
 
-Flow EVM is fully compatible with standard EVM tools.
+**Deployment via Forge (Recommended):**
+Foundry's `forge` is significantly faster and more reliable for multi-chain deployments.
 ```bash
-# Deployed via Forge (March 30, 2026)
-forge create contracts/HouseOfCards.sol:HouseOfCards --rpc-url https://testnet.evm.nodes.onflow.org --private-key 0x... --broadcast
+# Leaderboard
+forge create contracts/Leaderboard.sol:Leaderboard --rpc-url https://testnet.evm.nodes.onflow.org --private-key $PRIVATE_KEY --broadcast
+
+# HouseOfCards
+forge create contracts/HouseOfCards.sol:HouseOfCards --rpc-url https://testnet.evm.nodes.onflow.org --private-key $PRIVATE_KEY --broadcast
 ```
 
 ### 1c. Polkadot Hub Testnet
@@ -37,32 +41,18 @@ npx hardhat run scripts/deploy.ts --network polkadot
 
 ---
 
-## 2. Frontend Configuration (IPFS & Multi-chain)
+## 2. Frontend Configuration (Multi-Chain Agnostic)
+
+Agnej has been refactored to be completely chain-agnostic. To add a new chain:
+
+1.  **Define Chain:** Add the chain to `src/config/networks.ts` using Viem's `defineChain`.
+2.  **Add RPC/Explorer:** Update `RPC_ENDPOINTS` and `EXPLORER_URLS` in the same file.
+3.  **Register Contracts:** Add the deployed addresses to the `CONTRACT_ADDRESSES` mapping in `src/config/contracts.ts`.
+4.  **Currency Logic:** The UI automatically detects the native currency (ETH, FLOW, DOT) via the `getChainCurrency` helper.
 
 ### 2a. IPFS Configuration
 Agnej uses `src/lib/ipfs.ts` for decentralized persistence.
-- **Development:** Uses public IPFS gateways (ipfs.io).
-- **Production:** Recommended to add a Pinata or Web3.Storage API key to `.env`.
-
-```env
-# .env
-NEXT_PUBLIC_IPFS_GATEWAY=https://ipfs.io/ipfs/
-# Optional: Pinata/Web3.Storage keys
-```
-
-### 2b. Multi-chain Configuration
-Update `src/config/contracts.ts` with your newly deployed addresses:
-
-```typescript
-const CONTRACT_ADDRESSES = {
-  HOUSE_OF_CARDS: {
-    [lineaId]: '0x...',
-    [flowId]: '0x...',
-    [polkadotId]: '0x...',
-  },
-  // ...
-}
-```
+...
 
 ---
 

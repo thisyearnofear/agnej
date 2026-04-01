@@ -1,6 +1,8 @@
 import React from "react";
-import { TOWER_CONFIG, GAME_MODES } from "@/config";
+import { TOWER_CONFIG, GAME_MODES, getChainCurrency } from "@/config";
 import type { GameState as CentralizedGameState, Player, Survivor } from "@/hooks/useGameState";
+import { useAccount } from "wagmi";
+import { lineaSepolia } from "wagmi/chains";
 
 export type GameState = "WAITING" | "ACTIVE" | "VOTING" | "ENDED" | "COLLAPSED";
 
@@ -63,6 +65,10 @@ export default function GameUI({
     showRules, 
     showHelpers 
   } = state;
+
+  const { chainId } = useAccount();
+  const currentChainId = chainId || lineaSepolia.id;
+  const currency = getChainCurrency(currentChainId);
 
   const [scoreJuice, setScoreJuice] = React.useState(false);
   const [localShowRules, setLocalShowRules] = React.useState(false);
@@ -210,7 +216,7 @@ export default function GameUI({
             <div className="bg-gray-900/50 backdrop-blur-md rounded-xl p-4 text-white border border-green-500/20"
               style={{ boxShadow: '0 0 12px rgba(34,197,94,0.1)' }}>
               <div className="text-xs text-gray-400 uppercase tracking-wider">Pot Size</div>
-              <div className="text-2xl font-bold bg-gradient-to-r from-green-400 to-emerald-500 bg-clip-text text-transparent">${potSize.toFixed(2)}</div>
+              <div className="text-2xl font-bold bg-gradient-to-r from-green-400 to-emerald-500 bg-clip-text text-transparent">{potSize.toFixed(3)} {currency}</div>
             </div>
           )}
         </div>
@@ -348,7 +354,7 @@ export default function GameUI({
               <div className="bg-blue-500/10 rounded-lg p-4">
                 <p className="text-sm"><strong>Difficulty:</strong> {difficulty}</p>
                 <p className="text-sm"><strong>Mode:</strong> {gameMode.replace(/_/g, " ")}</p>
-                {!isPractice && <p className="text-sm"><strong>Stake:</strong> ${stake} USDC</p>}
+                {!isPractice && <p className="text-sm"><strong>Stake:</strong> {stake} {currency}</p>}
               </div>
             </div>
 

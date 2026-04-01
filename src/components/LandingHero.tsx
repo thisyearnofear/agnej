@@ -54,10 +54,10 @@ export default function LandingHero() {
               </span>
             </h1>
             <p className="text-xl md:text-2xl mb-2 text-gray-300 max-w-2xl mx-auto animate-pulse-slow">
-              The ultimate physics-based blockchain game
+              The ultimate physics-based coordination game
             </p>
             <p className="text-lg text-gray-400 max-w-xl mx-auto mb-8">
-              Built on Linea • Play solo or battle friends • Earn real rewards
+              Multi-Chain • Verifiable Replays • Social Coordination
             </p>
 
             {/* Contextual Primary CTA */}
@@ -105,7 +105,7 @@ export default function LandingHero() {
                 {
                   step: '01',
                   title: 'Connect Wallet',
-                  desc: 'Pick your favorite Linea-compatible wallet to get started.',
+                  desc: 'Pick your favorite Web3-compatible wallet to get started.',
                   icon: '🔌'
                 },
                 {
@@ -145,7 +145,7 @@ export default function LandingHero() {
               const descriptions = [
                 'Race against time removing blocks in our challenging solo mode with leaderboard rankings',
                 'Battle against up to 6 other players in turn-based tower destruction',
-                'Secure on-chain leaderboards and rewards powered by Linea'
+                'Secure on-chain leaderboards and rewards powered by multi-chain infrastructure'
               ]
 
               const icons = ['🏆', '👥', '🔗']
@@ -195,7 +195,7 @@ export default function LandingHero() {
               },
               {
                 title: '🔗 Blockchain Powered',
-                description: 'Secure on-chain leaderboards and transparent reward distribution on Linea',
+                description: 'Secure on-chain leaderboards and transparent reward distribution',
                 color: 'purple'
               },
               {
