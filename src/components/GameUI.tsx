@@ -37,6 +37,8 @@ interface GameUIProps {
   onExit?: () => void;
   setShowRules: (show: boolean) => void;
   setShowHelpers: (show: boolean) => void;
+  interactionMode: "camera" | "pull";
+  onToggleInteractionMode: () => void;
 }
 
 export default function GameUI({
@@ -55,6 +57,8 @@ export default function GameUI({
   onExit,
   setShowRules,
   setShowHelpers,
+  interactionMode,
+  onToggleInteractionMode,
 }: GameUIProps) {
   const { 
     status: gameState, 
@@ -310,6 +314,13 @@ export default function GameUI({
           <div className="flex gap-2">
             <button onClick={toggleRules} className="bg-gray-900/40 backdrop-blur-md border border-white/10 rounded-lg p-3 text-white hover:bg-white/10 transition-colors">
               <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+            </button>
+            <button
+              onClick={onToggleInteractionMode}
+              className={`backdrop-blur-md border rounded-lg px-3 py-2 text-xs font-bold uppercase tracking-wide transition-colors ${interactionMode === "pull" ? "bg-amber-500/20 border-amber-500/50 text-amber-300" : "bg-sky-500/20 border-sky-500/50 text-sky-300"}`}
+              title={interactionMode === "pull" ? "Pull mode: camera locked for block removal" : "Camera mode: orbit around the tower"}
+            >
+              {interactionMode === "pull" ? "Pull Block" : "Camera"}
             </button>
             <button onClick={() => setShowHelpers(!showHelpers)} className={`backdrop-blur-md border rounded-lg p-3 transition-colors ${showHelpers ? "bg-green-500/20 border-green-500/50 text-green-400" : "bg-gray-900/40 border-white/10 text-white hover:bg-white/10"}`}>
               <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>

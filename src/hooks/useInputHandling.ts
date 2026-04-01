@@ -34,13 +34,13 @@ interface UseInputHandlingParams {
   setShowRules: (show: boolean) => void
   setDragIndicator: (indicator: any) => void
   executeAIMove: () => void
+  interactionMode: 'camera' | 'pull'
 }
 
 export function useInputHandling(params: UseInputHandlingParams) {
   const {
     engineRef,
     blocksRef,
-    orbitControlsRef,
     hoveredBlockRef,
     dragStartRef,
     wobbleRef,
@@ -57,6 +57,7 @@ export function useInputHandling(params: UseInputHandlingParams) {
     setShowRules,
     setDragIndicator,
     executeAIMove,
+    interactionMode,
   } = params
 
   const initEventHandling = useCallback(function () {
@@ -80,6 +81,20 @@ export function useInputHandling(params: UseInputHandlingParams) {
 
     // Hover highlight handler
     const handleMouseMove = function (evt: MouseEvent) {
+      if (interactionMode !== 'pull') {
+        if (hoveredBlockRef.current) {
+          const prev = hoveredBlockRef.current
+          if (prev.material && prev.userData._hoverOrigEmissive !== undefined) {
+            prev.material.emissive = new THREE.Color(prev.userData._hoverOrigEmissive)
+            prev.material.emissiveIntensity = 0
+            delete prev.userData._hoverOrigEmissive
+          }
+          hoveredBlockRef.current = null
+        }
+        engine.renderer.domElement.style.cursor = 'grab'
+        return
+      }
+
       // Skip hover if dragging
       if (engine.interaction.selectedBlock !== null) return
 
@@ -126,13 +141,12 @@ export function useInputHandling(params: UseInputHandlingParams) {
         return
       }
 
+      if (interactionMode !== 'pull') return
+
       if (isSpectator || gameState !== 'ACTIVE' || isGameOver) return
       if (gameMode === 'MULTIPLAYER' && !isCurrentPlayer) return
       if (gameMode === 'SINGLE_VS_AI' && aiTurnRef.current) return
       if (evt.type === 'touchstart') evt.preventDefault()
-
-      // Disable orbit during drag
-      if (orbitControlsRef.current) orbitControlsRef.current.enabled = false
 
       const { clientX, clientY } = getEventPos(evt)
       const rect = engine.renderer.domElement.getBoundingClientRect()
@@ -177,9 +191,6 @@ export function useInputHandling(params: UseInputHandlingParams) {
     }
 
     const handleInputEnd = function (evt: MouseEvent | TouchEvent) {
-      // Re-enable orbit
-      if (orbitControlsRef.current) orbitControlsRef.current.enabled = true
-
       if (engine.interaction.selectedBlock !== null) {
         const block = engine.interaction.selectedBlock
         if (block.material && block.userData.originalEmissive !== undefined) {
@@ -301,7 +312,7 @@ export function useInputHandling(params: UseInputHandlingParams) {
       handleInputMove,
       handleInputEnd
     }
-  }, [engineRef, blocksRef, orbitControlsRef, hoveredBlockRef, dragStartRef, wobbleRef, socketRef, eventHandlersRef, aiTurnRef, gameMode, gameState, isSpectator, isCurrentPlayer, isGameOver, showRulesRef, showHelpersRef, setShowRules, setDragIndicator, executeAIMove])
+  }, [engineRef, blocksRef, hoveredBlockRef, dragStartRef, wobbleRef, socketRef, eventHandlersRef, aiTurnRef, gameMode, gameState, isSpectator, isCurrentPlayer, isGameOver, showRulesRef, showHelpersRef, setShowRules, setDragIndicator, executeAIMove, interactionMode])
 
   const cleanupEventHandling = useCallback(function () {
     const engine = engineRef.current

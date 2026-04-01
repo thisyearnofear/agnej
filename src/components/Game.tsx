@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useEffect, useRef, useCallback } from 'react'
+import React, { useEffect, useRef, useCallback, useState } from 'react'
 import { useAccount } from 'wagmi'
 import { GameSettingsConfig } from './GameSettings'
 import { loadScript } from './Game/physicsHelpers'
@@ -41,6 +41,7 @@ interface GameProps {
 
 export default function Game({ settings, onReset, onExit }: GameProps) {
   const { address } = useAccount()
+  const [interactionMode, setInteractionMode] = useState<'camera' | 'pull'>('camera')
 
   // Contract Hooks
   const {
@@ -131,6 +132,31 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
   useEffect(() => { showRulesRef.current = state.showRules }, [state.showRules])
   useEffect(() => { showHelpersRef.current = state.showHelpers }, [state.showHelpers])
   useEffect(() => { socketRef.current = socket }, [socket])
+  useEffect(() => {
+    if (orbitControlsRef.current) {
+      orbitControlsRef.current.enabled = interactionMode === 'camera'
+    }
+
+    const engine = engineRef.current
+    if (!engine?.renderer?.domElement) return
+
+    if (interactionMode === 'camera') {
+      engine.renderer.domElement.style.cursor = 'grab'
+      if (engine.interaction.selectedBlock) {
+        const block = engine.interaction.selectedBlock
+        if (block.material && block.userData.originalEmissive !== undefined) {
+          block.material.emissive = new THREE.Color(block.userData.originalEmissive)
+          block.material.emissiveIntensity = 0
+          delete block.userData.originalEmissive
+        }
+      }
+      engine.interaction.selectedBlock = null
+      dragStartRef.current = null
+      actions.setDragIndicator(null)
+    } else {
+      engine.renderer.domElement.style.cursor = 'default'
+    }
+  }, [interactionMode, actions.setDragIndicator])
 
   // Sync Contract Data
   useEffect(() => {
@@ -411,6 +437,7 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
       controls.maxPolarAngle = ORBIT_CONFIG.MAX_POLAR
       controls.enableDamping = true
       controls.dampingFactor = ORBIT_CONFIG.DAMPING_FACTOR
+      controls.enabled = interactionMode === 'camera'
       orbitControlsRef.current = controls
     }
 
@@ -594,6 +621,7 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
     setShowRules: actions.setShowRules,
     setDragIndicator: actions.setDragIndicator,
     executeAIMove,
+    interactionMode,
   })
 
   const createTower = function () {
@@ -705,6 +733,8 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
           onExit={onExit}
           setShowRules={actions.setShowRules}
           setShowHelpers={actions.setShowHelpers}
+          interactionMode={interactionMode}
+          onToggleInteractionMode={() => setInteractionMode(prev => prev === 'camera' ? 'pull' : 'camera')}
         />
       </div>
 
@@ -753,6 +783,16 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
       {(isPending || isConfirming) && (
         <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50 bg-blue-600 text-white px-4 py-2 rounded-full shadow-lg animate-pulse">
           {isPending ? 'Check Wallet...' : 'Confirming Transaction...'}
+        </div>
+      )}
+
+      {gameState === 'ACTIVE' && (
+        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 pointer-events-none">
+          <div className="bg-black/55 backdrop-blur-md border border-white/10 rounded-full px-4 py-2 text-xs md:text-sm text-white/90 shadow-lg">
+            {interactionMode === 'camera'
+              ? 'Camera mode active — switch to Pull Block to remove a piece'
+              : 'Pull Block mode active — camera locked while you drag'}
+          </div>
         </div>
       )}
 
