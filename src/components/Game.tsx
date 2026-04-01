@@ -113,6 +113,7 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
   const hoveredBlockRef = useRef<any>(null)
   const wobbleRef = useRef<WobbleState | null>(null)
   const orbitControlsRef = useRef<any>(null)
+  const interactionModeRef = useRef<'camera' | 'pull'>(interactionMode)
   const lastTimerWarningRef = useRef<number>(0)
   const lastTimerTickRef = useRef<number>(0)
   const aiTurnRef = useRef(false)
@@ -132,6 +133,7 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
   useEffect(() => { showRulesRef.current = state.showRules }, [state.showRules])
   useEffect(() => { showHelpersRef.current = state.showHelpers }, [state.showHelpers])
   useEffect(() => { socketRef.current = socket }, [socket])
+  useEffect(() => { interactionModeRef.current = interactionMode }, [interactionMode])
   useEffect(() => {
     if (orbitControlsRef.current) {
       orbitControlsRef.current.enabled = interactionMode === 'camera'
@@ -621,7 +623,7 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
     setShowRules: actions.setShowRules,
     setDragIndicator: actions.setDragIndicator,
     executeAIMove,
-    interactionMode,
+    interactionModeRef,
   })
 
   const createTower = function () {

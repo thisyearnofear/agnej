@@ -34,7 +34,7 @@ interface UseInputHandlingParams {
   setShowRules: (show: boolean) => void
   setDragIndicator: (indicator: any) => void
   executeAIMove: () => void
-  interactionMode: 'camera' | 'pull'
+  interactionModeRef: React.MutableRefObject<'camera' | 'pull'>
 }
 
 export function useInputHandling(params: UseInputHandlingParams) {
@@ -57,7 +57,7 @@ export function useInputHandling(params: UseInputHandlingParams) {
     setShowRules,
     setDragIndicator,
     executeAIMove,
-    interactionMode,
+    interactionModeRef,
   } = params
 
   const initEventHandling = useCallback(function () {
@@ -81,7 +81,7 @@ export function useInputHandling(params: UseInputHandlingParams) {
 
     // Hover highlight handler
     const handleMouseMove = function (evt: MouseEvent) {
-      if (interactionMode !== 'pull') {
+      if (interactionModeRef.current !== 'pull') {
         if (hoveredBlockRef.current) {
           const prev = hoveredBlockRef.current
           if (prev.material && prev.userData._hoverOrigEmissive !== undefined) {
@@ -141,7 +141,7 @@ export function useInputHandling(params: UseInputHandlingParams) {
         return
       }
 
-      if (interactionMode !== 'pull') return
+      if (interactionModeRef.current !== 'pull') return
 
       if (isSpectator || gameState !== 'ACTIVE' || isGameOver) return
       if (gameMode === 'MULTIPLAYER' && !isCurrentPlayer) return
@@ -312,7 +312,7 @@ export function useInputHandling(params: UseInputHandlingParams) {
       handleInputMove,
       handleInputEnd
     }
-  }, [engineRef, blocksRef, hoveredBlockRef, dragStartRef, wobbleRef, socketRef, eventHandlersRef, aiTurnRef, gameMode, gameState, isSpectator, isCurrentPlayer, isGameOver, showRulesRef, showHelpersRef, setShowRules, setDragIndicator, executeAIMove, interactionMode])
+  }, [engineRef, blocksRef, hoveredBlockRef, dragStartRef, wobbleRef, socketRef, eventHandlersRef, aiTurnRef, gameMode, gameState, isSpectator, isCurrentPlayer, isGameOver, showRulesRef, showHelpersRef, setShowRules, setDragIndicator, executeAIMove, interactionModeRef])
 
   const cleanupEventHandling = useCallback(function () {
     const engine = engineRef.current
