@@ -38,7 +38,7 @@ interface GameUIProps {
   setShowRules: (show: boolean) => void;
   setShowHelpers: (show: boolean) => void;
   interactionMode: "camera" | "pull";
-  onToggleInteractionMode: () => void;
+  onSetInteractionMode: (mode: "camera" | "pull") => void;
 }
 
 export default function GameUI({
@@ -58,7 +58,7 @@ export default function GameUI({
   setShowRules,
   setShowHelpers,
   interactionMode,
-  onToggleInteractionMode,
+  onSetInteractionMode,
 }: GameUIProps) {
   const { 
     status: gameState, 
@@ -227,10 +227,34 @@ export default function GameUI({
       </div>
 
       {/* Centered Title */}
-      <div className="absolute top-4 left-1/2 -translate-x-1/2 pointer-events-none">
-        <h1 className="text-2xl md:text-3xl font-black tracking-widest bg-gradient-to-r from-blue-400 via-purple-500 to-pink-500 bg-clip-text text-transparent">
+      <div className="absolute top-4 left-1/2 -translate-x-1/2 flex flex-col items-center gap-3">
+        <h1 className="pointer-events-none text-2xl md:text-3xl font-black tracking-widest bg-gradient-to-r from-blue-400 via-purple-500 to-pink-500 bg-clip-text text-transparent">
           AGNEJ
         </h1>
+
+        {gameState === "ACTIVE" && (
+          <div className="pointer-events-auto flex flex-col items-center gap-2">
+            <div className="inline-flex rounded-2xl border border-white/10 bg-black/45 p-1 backdrop-blur-md shadow-lg shadow-black/20">
+              <button
+                onClick={() => onSetInteractionMode("camera")}
+                className={`rounded-xl px-4 py-2 text-xs md:text-sm font-semibold transition-all ${interactionMode === "camera" ? "bg-sky-500 text-white shadow-md shadow-sky-900/40" : "text-white/70 hover:bg-white/10 hover:text-white"}`}
+                title="Orbit around the tower"
+              >
+                Orbit Camera
+              </button>
+              <button
+                onClick={() => onSetInteractionMode("pull")}
+                className={`rounded-xl px-4 py-2 text-xs md:text-sm font-semibold transition-all ${interactionMode === "pull" ? "bg-amber-500 text-black shadow-md shadow-amber-900/30" : "text-white/70 hover:bg-white/10 hover:text-white"}`}
+                title="Lock the camera and pull a block"
+              >
+                Pull Block
+              </button>
+            </div>
+            <div className="pointer-events-none text-center text-[11px] md:text-xs text-white/65">
+              {interactionMode === "camera" ? "Switch to Pull Block before dragging a piece" : "Camera is locked while block removal is active"}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Center: Timer */}
@@ -314,13 +338,6 @@ export default function GameUI({
           <div className="flex gap-2">
             <button onClick={toggleRules} className="bg-gray-900/40 backdrop-blur-md border border-white/10 rounded-lg p-3 text-white hover:bg-white/10 transition-colors">
               <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
-            </button>
-            <button
-              onClick={onToggleInteractionMode}
-              className={`backdrop-blur-md border rounded-lg px-3 py-2 text-xs font-bold uppercase tracking-wide transition-colors ${interactionMode === "pull" ? "bg-amber-500/20 border-amber-500/50 text-amber-300" : "bg-sky-500/20 border-sky-500/50 text-sky-300"}`}
-              title={interactionMode === "pull" ? "Pull mode: camera locked for block removal" : "Camera mode: orbit around the tower"}
-            >
-              {interactionMode === "pull" ? "Pull Block" : "Camera"}
             </button>
             <button onClick={() => setShowHelpers(!showHelpers)} className={`backdrop-blur-md border rounded-lg p-3 transition-colors ${showHelpers ? "bg-green-500/20 border-green-500/50 text-green-400" : "bg-gray-900/40 border-white/10 text-white hover:bg-white/10"}`}>
               <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>

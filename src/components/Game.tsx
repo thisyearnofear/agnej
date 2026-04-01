@@ -734,7 +734,7 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
           setShowRules={actions.setShowRules}
           setShowHelpers={actions.setShowHelpers}
           interactionMode={interactionMode}
-          onToggleInteractionMode={() => setInteractionMode(prev => prev === 'camera' ? 'pull' : 'camera')}
+          onSetInteractionMode={setInteractionMode}
         />
       </div>
 
