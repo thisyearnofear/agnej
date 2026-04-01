@@ -518,6 +518,61 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
     addToast,
   })
 
+  // AI move execution (declared early to avoid hoisting issues)
+  const executeAIMove = useCallback(() => {
+    if (settings.gameMode !== 'SINGLE_VS_AI' || state.gameOver || aiTurnRef.current) return
+    aiTurnRef.current = true
+
+    const blocks = blocksRef.current
+    const scene = sceneRef.current
+    if (!scene || blocks.length === 0) { aiTurnRef.current = false; return }
+
+    const blockStates: BlockState[] = blocks.map(b => ({
+      position: { x: b.position.x, y: b.position.y, z: b.position.z },
+      rotation: { y: b.rotation.y },
+      userData: { layer: b.userData?.layer ?? 0, isLocked: b.userData?.isLocked ?? false },
+    }))
+
+    const difficulty: AIDifficulty = settings.difficulty as AIDifficulty
+    const delay = getAIMoveDelay(difficulty)
+
+    setTimeout(() => {
+      if (gameOverRef.current) { aiTurnRef.current = false; return }
+
+      const move = generateAIMove(blockStates, difficulty, Date.now())
+      if (!move || !blocksRef.current[move.blockIndex]) {
+        aiTurnRef.current = false
+        return
+      }
+
+      const block = blocksRef.current[move.blockIndex]
+      const force = new THREE.Vector3(move.force.x, move.force.y, move.force.z)
+
+      // Trigger wobble proportional to force
+      const forceLen = force.length()
+      const wobbleAmplitude = Math.min(0.02, forceLen * 0.0003)
+      if (wobbleAmplitude > 0.002) {
+        wobbleRef.current = createWobble(wobbleAmplitude)
+      }
+
+      if (block.setAngularVelocity) block.setAngularVelocity(new THREE.Vector3(0, 0, 0))
+      if (block.setLinearVelocity) block.setLinearVelocity(new THREE.Vector3(0, 0, 0))
+
+      if (typeof block.applyCentralImpulse === 'function') {
+        block.applyCentralImpulse(force)
+      } else {
+        block.applyCentralForce(force)
+      }
+
+      addToast({ type: 'info', message: `AI pulled block ${move.blockIndex + 1}` })
+
+      // Let physics settle, then re-enable human input
+      setTimeout(() => {
+        aiTurnRef.current = false
+      }, 500)
+    }, delay)
+  }, [settings.gameMode, state.gameOver, getAIMoveDelay, addToast, createWobble])
+
   // Input handling hook
   const { initEventHandling, cleanupEventHandling } = useInputHandling({
     engineRef,
@@ -600,60 +655,6 @@ export default function Game({ settings, onReset, onExit }: GameProps) {
       sc.simulate()
     }
   }
-
-  const executeAIMove = useCallback(() => {
-    if (settings.gameMode !== 'SINGLE_VS_AI' || state.gameOver || aiTurnRef.current) return
-    aiTurnRef.current = true
-
-    const blocks = blocksRef.current
-    const scene = sceneRef.current
-    if (!scene || blocks.length === 0) { aiTurnRef.current = false; return }
-
-    const blockStates: BlockState[] = blocks.map(b => ({
-      position: { x: b.position.x, y: b.position.y, z: b.position.z },
-      rotation: { y: b.rotation.y },
-      userData: { layer: b.userData?.layer ?? 0, isLocked: b.userData?.isLocked ?? false },
-    }))
-
-    const difficulty: AIDifficulty = settings.difficulty as AIDifficulty
-    const delay = getAIMoveDelay(difficulty)
-
-    setTimeout(() => {
-      if (gameOverRef.current) { aiTurnRef.current = false; return }
-
-      const move = generateAIMove(blockStates, difficulty, Date.now())
-      if (!move || !blocksRef.current[move.blockIndex]) {
-        aiTurnRef.current = false
-        return
-      }
-
-      const block = blocksRef.current[move.blockIndex]
-      const force = new THREE.Vector3(move.force.x, move.force.y, move.force.z)
-
-      // Trigger wobble proportional to force
-      const forceLen = force.length()
-      const wobbleAmplitude = Math.min(0.02, forceLen * 0.0003)
-      if (wobbleAmplitude > 0.002) {
-        wobbleRef.current = createWobble(wobbleAmplitude)
-      }
-
-      if (block.setAngularVelocity) block.setAngularVelocity(new THREE.Vector3(0, 0, 0))
-      if (block.setLinearVelocity) block.setLinearVelocity(new THREE.Vector3(0, 0, 0))
-
-      if (typeof block.applyCentralImpulse === 'function') {
-        block.applyCentralImpulse(force)
-      } else {
-        block.applyCentralForce(force)
-      }
-
-      addToast({ type: 'info', message: `AI pulled block ${move.blockIndex + 1}` })
-
-      // Let physics settle, then re-enable human input
-      setTimeout(() => {
-        aiTurnRef.current = false
-      }, 500)
-    }, delay)
-  }, [settings.gameMode, settings.difficulty, addToast])
 
   // Timer effect for SOLO_COMPETITOR - decrement handled in render loop via actions.decrementTimer
   // This effect handles the timer warning toast

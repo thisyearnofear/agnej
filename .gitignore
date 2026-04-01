@@ -61,3 +61,4 @@ package-lock.json
 
 # External repos
 remix-3d-jenga-tower-game/
+.blackboxcli/

@@ -22,6 +22,8 @@ interface GameOverProps {
     totalPlayers?: number
     topScores?: Array<{ player: string, score: number }>
     onPlayAgain?: () => void
+    isPending?: boolean
+    isConfirming?: boolean
     isConfirmed?: boolean
     onSubmitScore?: () => void
 
