@@ -56,7 +56,7 @@ typechain-types/
 .env.local
 .env.*.local
 
-# NPM
+# NPM (project uses bun.lock)
 package-lock.json
 
 # External repos

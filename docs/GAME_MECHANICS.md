@@ -181,12 +181,30 @@ const screenY = (1 - screenStart.y) / 2 * rect.height
 - Distributes pot equally among survivors
 - Sets game to ENDED
 
-## Security
+## Decentralized Persistence (Protocol Labs)
 
-- **ReentrancyGuard**: Protects all payable functions
-- **Ownable**: Only owner (oracle) calls state-changing functions
-- **Immutable constants**: Can't be changed mid-game
-- **No private keys in code**: Uses environment variables
+### IPFS Game Replays
+- **Trigger**: Automatically activated when the tower collapses in any game mode.
+- **Mechanism**: 
+  - The final 3D state of all 48 blocks (position and rotation) is serialized into a JSON object.
+  - The metadata includes the score, difficulty, and game mode.
+  - The data is pinned to **IPFS** via the `src/lib/ipfs.ts` service.
+- **CID Generation**: A unique Content Identifier (CID) is generated for every collapse.
+- **Verification**: Players receive the CID on the Game Over screen, allowing them to view their tower's final state on any public IPFS gateway (e.g., `ipfs.io`).
+
+## Multi-Chain Support
+
+Agnej is built for a multi-chain future, allowing players to coordinate across different ecosystems.
+
+| Network | Native Token | Chain ID | Role |
+|---------|--------------|----------|------|
+| **Linea Sepolia** | ETH | 59141 | Primary development & PoH integration |
+| **Flow EVM Testnet** | FLOW | 545 | High-performance gaming with low latency |
+| **Polkadot Hub Testnet** | DOT | 420420417 | Cross-chain coordination & XCM potential |
+
+### Wallet Integration
+- **Coinbase Smart Wallet**: Support for frictionless onboarding using **OnchainKit**, allowing users to play without manually managing private keys or gas (where supported).
+- **RainbowKit**: Standard wallet connection for Metamask, Rainbow, and WalletConnect.
 
 ## Example Game Flow
 

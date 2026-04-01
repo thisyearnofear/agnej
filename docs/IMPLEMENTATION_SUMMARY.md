@@ -147,123 +147,41 @@ The MetricsCollector is seamlessly integrated into GameInstance:
 }
 ```
 
+## PL Genesis Hackathon Enhancements (March 2026)
+
+### 1. Decentralized Persistence (Protocol Labs)
+- **IPFS Integration**: Automated pinning of tower collapse states to IPFS.
+- **Verifiable History**: Serialization of 48-block physics data (position/rotation) for every collapse.
+- **CID Generation**: Unique Content Identifiers generated and stored in game state.
+- **Service**: `src/lib/ipfs.ts` modular persistence service.
+
+### 2. Multi-Chain Infrastructure
+- **Flow EVM Support**: Added Flow EVM Testnet (Chain ID 545) with native FLOW support.
+- **Polkadot Hub Support**: Added Polkadot Hub Testnet (Chain ID 420420417) for cross-chain coordination.
+- **Centralized Registry**: `src/config/contracts.ts` refactored for effortless multi-chain expansion.
+- **Server Side**: `BlockchainService` updated to handle multiple providers (Linea, Flow, Polkadot).
+
+### 3. Coinbase Smart Wallet Integration
+- **OnchainKit**: Integrated Coinbase's OnchainKit for simplified onboarding.
+- **Smart Wallet**: Support for frictionless, gasless-ready gameplay.
+- **RainbowKit**: Custom wallet list featuring Coinbase, MetaMask, and Rainbow.
+
 ## Key Components
-
-### 1. **TurnManager** - Turn Logic Centralization
-- ✅ Explicit turn validation
-- ✅ Timeout handling
-- ✅ Player elimination tracking
-- ✅ Event-driven architecture
-
-### 2. **MoveValidator** - Validation Consolidation
-- ✅ Single source of truth for move rules
-- ✅ Comprehensive error reporting
-- ✅ Physics validation integration
-- ✅ DRY principle compliance
-
-### 3. **SpectatorManager** - Observer Pattern
-- ✅ Late join capability
-- ✅ Read-only state access
-- ✅ No payment verification required
-- ✅ Automatic cleanup on disconnect
-
-### 4. **ReconnectionManager** - Grace Period Handling
-- ✅ 30-second reconnection window
-- ✅ Automatic player restoration
-- ✅ Graceful degradation after timeout
-- ✅ Prevents zombie players
-
-### 5. **GameHistory** - State Versioning
-- ✅ 5-second snapshot intervals
-- ✅ Complete event logging
-- ✅ Replay data export
-- ✅ Memory-efficient storage
-
-### 6. **MetricsCollector** - Telemetry System
-- ✅ Comprehensive event tracking
-- ✅ Real-time calculations
-- ✅ Dashboard-ready export
-- ✅ Success rate analytics
-
-## Benefits Achieved
-
-### 1. **Operational Visibility**
-- Real-time monitoring of game health
-- Player engagement tracking
-- Move success patterns
-- Reconnection behavior analysis
-
-### 2. **Performance Optimization**
-- Turn duration analysis
-- Move validation efficiency
-- Reconnection success rates
-- Memory usage tracking
-
-### 3. **Player Experience Insights**
-- Success/failure patterns
-- Disconnection frequency
-- Spectator engagement
-- Game duration distribution
-
-### 4. **Dashboard Integration Ready**
-- Structured JSON output
-- Percentage calculations
-- Time-based metrics
-- Count-based metrics
-
-## Testing and Validation
-
-### ✅ Manual Testing Completed
-- MetricsCollector functionality verified
-- GameInstance integration validated
-- Real game simulation successful
-- Analytics export confirmed working
-
-### ✅ Build Status
-- ✅ Zero TypeScript errors
-- ✅ Clean compilation
-- ✅ Production-ready code
-
-## Usage Examples
-
-### Basic Metrics Export
-```typescript
-const metrics = game.exportMetrics('MEDIUM', false, memoryUsage, snapshots, events);
-console.log(metrics.moveSuccessRate); // 67%
-```
-
-### Comprehensive Analytics
-```typescript
-const analytics = game.exportGameAnalytics();
-// Includes replay data, metrics, and history stats
-```
-
-### Real-time Monitoring
-```typescript
-game.metrics.on('metricsUpdated', (metrics) => {
-    console.log('Real-time update:', metrics);
-});
-```
-
+...
 ## Files Modified/Created
 
+### PL Genesis Enhancements
+- `src/lib/ipfs.ts` - IPFS persistence service (NEW)
+- `src/config/networks.ts` - Multi-chain network definitions
+- `src/config/contracts.ts` - Multi-chain contract registry
+- `src/hooks/useGameState.ts` - State management for persistence
+- `src/components/Game.tsx` - Triggering IPFS uploads
+- `src/components/MultiplayerGameOver.tsx` - IPFS CID display
+- `src/components/Providers.tsx` - Coinbase Wallet integration
+- `server/src/services/blockchain.ts` - Multi-provider server support
+
 ### Core Implementation
-- `server/src/game/TurnManager.ts` - Turn logic
-- `server/src/game/MoveValidator.ts` - Move validation
-- `server/src/game/SpectatorManager.ts` - Spectator handling
-- `server/src/game/ReconnectionManager.ts` - Reconnection logic
-- `server/src/game/GameHistory.ts` - State versioning
-- `server/src/game/MetricsCollector.ts` - Telemetry system
-- `server/src/game/GameInstance.ts` - Main game class
-- `server/src/game/GameManager.ts` - Matchmaking
-
-### Types & Errors
-- `server/src/game/types.ts` - Type definitions
-- `server/src/game/errors.ts` - Error handling
-
-### Tests
-- `server/src/game/MetricsCollector.test.ts` - Unit tests
-- Various integration tests created and validated
+...
 
 ## Final Architecture Rating
 

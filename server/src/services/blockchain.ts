@@ -9,7 +9,7 @@ interface ChainConfig {
 }
 
 /** Supported chains */
-export type ChainName = 'linea' | 'polkadot';
+export type ChainName = 'linea' | 'polkadot' | 'flow';
 
 const CHAIN_CONFIGS: Record<ChainName, ChainConfig> = {
   linea: {
@@ -21,6 +21,11 @@ const CHAIN_CONFIGS: Record<ChainName, ChainConfig> = {
     rpcUrl: process.env.POLKADOT_RPC_URL || "https://rpc.polkadot.io/testnet",
     privateKey: process.env.POLKADOT_ORACLE_PRIVATE_KEY,
     contractAddress: process.env.POLKADOT_CONTRACT_ADDRESS || "0x0000000000000000000000000000000000000001",
+  },
+  flow: {
+    rpcUrl: process.env.FLOW_RPC_URL || "https://testnet.evm.nodes.onflow.org",
+    privateKey: process.env.FLOW_ORACLE_PRIVATE_KEY,
+    contractAddress: process.env.FLOW_CONTRACT_ADDRESS || "0x0000000000000000000000000000000000000545",
   },
 };
 
@@ -41,6 +46,7 @@ export class BlockchainService {
     // Initialize providers for all chains
     this.initializeChain('linea');
     this.initializeChain('polkadot');
+    this.initializeChain('flow');
     
     console.log(`[Blockchain] Initialized with active chain: ${this.activeChain}`);
   }
