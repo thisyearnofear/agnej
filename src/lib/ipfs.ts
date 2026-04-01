@@ -19,37 +19,87 @@ export interface GameStateHistory {
   }>;
 }
 
+const LOCAL_REPLAY_PREFIX = 'local:'
+const LOCAL_REPLAY_STORAGE_PREFIX = 'agnej-replay:'
+
+function getLocalReplayStorageKey(reference: string): string {
+  return `${LOCAL_REPLAY_STORAGE_PREFIX}${reference.replace(LOCAL_REPLAY_PREFIX, '')}`
+}
+
+function saveReplayLocally(history: GameStateHistory): string {
+  const replayId = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
+  const reference = `${LOCAL_REPLAY_PREFIX}${replayId}`
+
+  if (typeof window !== 'undefined') {
+    window.localStorage.setItem(getLocalReplayStorageKey(reference), JSON.stringify(history))
+  }
+
+  return reference
+}
+
 /**
  * Uploads game state history to IPFS
- * For the hackathon, this uses a public gateway or a placeholder for a pinning service
+ * Falls back to local browser persistence if IPFS pinning is unavailable
  */
 export async function uploadToIPFS(history: GameStateHistory): Promise<string> {
   console.log('[IPFS] Uploading game history...', history);
   
   try {
-    // In a production app, you'd use a service like Pinata or Web3.Storage
-    // For this demo/hackathon, we simulate the CID generation or use a public pinning API if available
-    
-    // Example using a hypothetical pinning service endpoint
-    // const response = await fetch('https://api.pinata.cloud/pinning/pinJSONToIPFS', { ... });
-    
-    // Mocking CID generation for demonstration
-    const mockCid = `bafybeihdwdcefmc28df3026dfg456${Math.random().toString(36).substring(7)}`;
-    
-    // Simulate network delay
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    
-    console.log('[IPFS] Successfully pinned history. CID:', mockCid);
-    return mockCid;
+    const response = await fetch('/api/ipfs', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(history)
+    })
+
+    if (!response.ok) {
+      throw new Error(`IPFS pinning failed with status ${response.status}`)
+    }
+
+    const data = await response.json()
+
+    if (!data?.cid) {
+      throw new Error('IPFS pinning response did not include a CID')
+    }
+
+    console.log('[IPFS] Successfully pinned history. CID:', data.cid)
+    return data.cid
   } catch (error) {
-    console.error('[IPFS] Upload failed:', error);
-    throw error;
+    console.error('[IPFS] Upload failed, falling back to local replay storage:', error)
+    return saveReplayLocally(history)
   }
 }
 
 /**
- * Generates a URL for viewing data on an IPFS gateway
+ * Generates an app URL for viewing a replay reference
  */
-export function getIPFSUrl(cid: string): string {
-  return `https://ipfs.io/ipfs/${cid}`;
+export function getReplayUrl(reference: string): string {
+  return `/replay/${encodeURIComponent(reference)}`
+}
+
+export function isLocalReplayReference(reference: string): boolean {
+  return reference.startsWith(LOCAL_REPLAY_PREFIX)
+}
+
+export function getPublicIPFSUrl(cid: string): string {
+  return `https://ipfs.io/ipfs/${cid}`
+}
+
+export function loadLocalReplay(reference: string): GameStateHistory | null {
+  if (typeof window === 'undefined' || !isLocalReplayReference(reference)) {
+    return null
+  }
+
+  const raw = window.localStorage.getItem(getLocalReplayStorageKey(reference))
+  if (!raw) {
+    return null
+  }
+
+  try {
+    return JSON.parse(raw) as GameStateHistory
+  } catch (error) {
+    console.error('[IPFS] Failed to parse local replay data:', error)
+    return null
+  }
 }

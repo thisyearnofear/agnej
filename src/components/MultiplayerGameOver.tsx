@@ -1,6 +1,7 @@
 'use client'
 
 import React from 'react'
+import { getReplayUrl, isLocalReplayReference } from '@/lib/ipfs'
 
 interface Survivor {
     address: string
@@ -283,13 +284,13 @@ export default function GameOver({
                     {/* IPFS / Protocol Labs Replay Link */}
                     {collapseCid && (
                         <a
-                            href={`https://ipfs.io/ipfs/${collapseCid}`}
+                            href={getReplayUrl(collapseCid)}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="w-full bg-cyan-600/20 hover:bg-cyan-600/30 border border-cyan-400/50 text-cyan-200 font-bold py-3 rounded-lg transition-all transform hover:scale-105 flex items-center justify-center gap-2 mb-2"
                         >
                             <span>🌐</span>
-                            <span>View Game Replay on IPFS</span>
+                            <span>{isLocalReplayReference(collapseCid) ? 'View Saved Game Replay' : 'View Game Replay'}</span>
                             <span className="text-[10px] opacity-50 bg-black/40 px-1 rounded font-mono">
                                 {collapseCid.substring(0, 8)}...
                             </span>
