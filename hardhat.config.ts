@@ -1,4 +1,5 @@
 import { HardhatUserConfig } from "hardhat/types";
+import "@nomicfoundation/hardhat-toolbox";
 import "@parity/hardhat-polkadot";
 import * as dotenv from "dotenv";
 

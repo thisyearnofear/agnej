@@ -17,13 +17,14 @@ Agnej uses the same Solidity source code for all supported chains.
 npx hardhat run scripts/deploy.ts --network linea
 ```
 
-### 1b. Flow EVM Testnet
+### 1b. Flow EVM Testnet ✅ (DEPLOYED)
+- **Leaderboard:** `0x5758c5551FFAabbAD966B2d6C26dc9E21137D681`
+- **HouseOfCards:** `0xd21F62a37C2A72d0993dE6273Cb2eb830e53Fcd4`
+
 Flow EVM is fully compatible with standard EVM tools.
 ```bash
-# Add Flow network to hardhat.config.ts
-# Chain ID: 545
-# RPC: https://testnet.evm.nodes.onflow.org
-npx hardhat run scripts/deploy.ts --network flow
+# Deployed via Forge (March 30, 2026)
+forge create contracts/HouseOfCards.sol:HouseOfCards --rpc-url https://testnet.evm.nodes.onflow.org --private-key 0x... --broadcast
 ```
 
 ### 1c. Polkadot Hub Testnet

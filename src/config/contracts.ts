@@ -10,12 +10,12 @@ import { polkadotHubTestnet, flowEvmTestnet } from './networks'
 const CONTRACT_ADDRESSES: Record<string, Record<number, string>> = {
   HOUSE_OF_CARDS: {
     [lineaSepolia.id]: '0x1DFd9003590E4A67594748Ecec18451e6cBDDD90',
-    [flowEvmTestnet.id]: '0x0000000000000000000000000000000000000545', // TODO: Deploy to Flow
+    [flowEvmTestnet.id]: '0xd21F62a37C2A72d0993dE6273Cb2eb830e53Fcd4',
     [polkadotHubTestnet.id]: '0x0000000000000000000000000000000000000417', // TODO: Deploy to Polkadot
   },
   LEADERBOARD: {
     [lineaSepolia.id]: '0x9E35aB6885bED1E34ea531d39CAe377815Ab7Fb9',
-    [flowEvmTestnet.id]: '0x0000000000000000000000000000000000000546', // TODO: Deploy to Flow
+    [flowEvmTestnet.id]: '0x5758c5551FFAabbAD966B2d6C26dc9E21137D681',
     [polkadotHubTestnet.id]: '0x0000000000000000000000000000000000000418', // TODO: Deploy to Polkadot
   }
 }
