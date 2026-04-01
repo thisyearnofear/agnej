@@ -1,34 +1,65 @@
-# Agnej 🏗️
+# Agnej 🏗️ — The Physics of Social Coordination
 
-A physics-based game with smart contract integration and decentralised collaboration. Play solo, or enable Proof of Humanity to compete fairly on verified leaderboards. Join multiplayer battles with minimal blockchain interaction for efficient gameplay and lower gas costs.
+**Agnej** is a decentralized 3D physics-based coordination game built for the **PL Genesis: Frontiers of Collaboration** hackathon. 
 
-**🏆 PL Genesis: Frontiers of Collaboration (2026) Candidate**
-Agnej is built for the **Existing Code** track, showcasing decentralized coordination, multi-chain infrastructure, and verifiable game replays.
+In Agnej, players collaborate (or compete) to remove blocks from a high-fidelity 3D tower. It serves as a literal and digital metaphor for the "Frontiers of Collaboration"—where the actions of one individual can impact the stability of the entire collective system.
 
-**Built with:** Next.js, Three.js, Physijs, Solidity (Multi-chain), Socket.io, IPFS/Protocol Labs
+---
+
+## 🏆 Hackathon Submission: PL Genesis 2026
+*   **Track:** [Existing Code Track]($50,000 Prize Pool)
+*   **Submission Link:** [DevSpot Portal](https://pl-genesis-frontiers-of-collaboration-hackathon.devspot.app/)
+*   **Vision:** To create a "Universal Coordination Layer" where physics-based social interactions are verifiable on-chain and persisted permanently via decentralized storage.
+
+### 🚀 Work Completed During Hackathon (Feb 10 – Mar 31)
+| Feature | Technology | Impact |
+|---------|------------|--------|
+| **Verifiable Physics Replays** | **IPFS / Protocol Labs** | Captures and pins 48-block tower states upon collapse for immutable history. |
+| **Multi-Chain Expansion** | **Flow EVM** | Full deployment to Flow Testnet for high-throughput, low-latency coordination. |
+| **Cross-Chain Coordination** | **Polkadot Hub** | Integrated Polkadot Hub Testnet for future XCM-based leaderboard aggregation. |
+| **Frictionless Onboarding** | **Coinbase Smart Wallet** | Integrated OnchainKit to remove gas hurdles for new "collaborators". |
+| **Chain-Agnostic UI** | **Next.js / Wagmi** | Dynamic currency detection (FLOW/DOT/ETH) and contract resolution. |
+
+---
+
+## 🌌 Frontiers of Collaboration
+
+Agnej represents the frontier where game theory meets physical reality. 
+
+1.  **Shared Stability:** Every block removed increases the "Pot," but also increases the risk of collapse. This mirrors decentralized governance—where individual gain must be balanced against systemic health.
+2.  **Verifiable Truth (Protocol Labs):** By persisting tower states to **IPFS**, we move beyond "trust me" gaming. Every collapse is a permanent, verifiable CID that can be audited by any participant.
+3.  **Cross-Ecosystem Onboarding (Coinbase):** By using **OnchainKit**, we welcome users from the Coinbase ecosystem into the "Frontiers" with zero-friction onboarding.
+
+---
 
 ## 🎮 Game Modes
 
 ### Solo Practice
-- Practice physics and controls without pressure
-- No timer, no restrictions, no gates
-- Perfect for learning the game
+- Master the physics without the stakes. No timer, no restrictions.
 
 ### Solo Competitor ⭐ 
-- **Race against time** - 30 seconds to remove each block
-- **Top 2 layers locked** - Can't touch them!
-- **Collapse = Game Over** - If locked layers fall below Y=12
-- **On-Chain Leaderboard** - Submit scores to blockchain (no PoH required)
-- **Verifiable Replays** - Game state automatically persisted to **IPFS** on collapse
-- **Rankings & Competition** - See your rank vs global players (all or verified-only)
+- **Time-Trial Coordination:** 30 seconds per block.
+- **Verifiable Persistence:** Every collapse is pinned to **IPFS** automatically.
+- **On-Chain Leaderboard:** Submit high scores to **Linea**, **Flow**, or **Polkadot**.
 
 ### Multiplayer ⭐ LIVE
-- 7-player turn-based battles (Frontiers of Collaboration)
-- **Multi-Chain Support** - Play on **Linea**, **Flow EVM**, or **Polkadot Hub**
-- **Scalable Architecture** - Supports infinite concurrent game lobbies
-- **Secure Play** - Coinbase Smart Wallet support + Cryptographic handshake
-- Real-time physics synchronization (Optimized for Mobile)
-- Smart contract pot distribution (80% to winner)
+- **7-Player Coordination:** A true test of "Frontiers of Collaboration."
+- **High-Stakes:** Split the pot among survivors—or lose everything if you're the one who triggers the collapse.
+- **Scalable Architecture:** Real-time physics synchronization across multiple chains.
+
+---
+
+## 🛠️ Tech Stack & Bounties
+
+| Sponsor / Tech | Integration Details | Bounty Track |
+|----------------|---------------------|--------------|
+| **Protocol Labs / IPFS** | `src/lib/ipfs.ts` - Pins game state JSON to IPFS on collapse. | Open Data / Persistence |
+| **Flow EVM** | `0xd21F62a37C2A72d0993dE6273Cb2eb830e53Fcd4` - Live on Flow Testnet. | $10,000 Flow Challenge |
+| **Coinbase / CDP** | **OnchainKit** integration for Smart Wallet support. | Consumer dApps |
+| **Polkadot Hub** | Refactored multi-chain config for DOT/PAS support. | Polkadot EVM Track |
+| **Linea** | **Proof of Humanity (PoH)** V2 integration for sybil-resistance. | Human-centric dApps |
+
+---
 
 ## 🚀 Quick Start
 
@@ -44,81 +75,16 @@ npm run dev          # Frontend on :3000
 cd server && npm run dev  # Backend on :3001
 ```
 
-Open [http://localhost:3000](http://localhost:3000)
+---
 
 ## 📚 Documentation
 
-Comprehensive documentation consolidated into core guides:
-
-1. **[Architecture Overview](docs/ARCHITECTURE.md)** - System architecture, refactoring phases, design decisions ⭐ **UPDATED 2026-03**
-2. **[Deployment Guide](docs/DEPLOYMENT_GUIDE.md)** - Multi-chain deployment (Linea, Flow, Polkadot)
-3. **[Game Mechanics](docs/GAME_MECHANICS.md)** - Game rules, tower structure, gameplay loops, and mobile features
-4. **[Polkadot Hackathon Plan](docs/POLKADOT_HACKATHON.md)** - Specific implementation for Polkadot Hub
-
-## ✨ Key Features
-
-### Decentralized Persistence (Protocol Labs)
-- ✅ **Verifiable Game State** - Tower collapse states are serialized and pinned to **IPFS**.
-- ✅ **Immutable Replays** - Players receive a CID (Content Identifier) to view their tower's final state.
-- ✅ **Open Data** - Physics data is stored on-chain (Score) and off-chain (IPFS) for transparency.
-
-### Multi-Chain Infrastructure
-- ✅ **Linea Sepolia** - Primary testnet with PoH integration.
-- ✅ **Flow EVM** - High-throughput gaming experience with FLOW tokens.
-- ✅ **Polkadot Hub** - Cross-chain coordination primitives and DOT staking.
-- ✅ **Coinbase Wallet** - Simplified onboarding via **OnchainKit** and Smart Wallet.
-
-## 🛠️ Tech Stack
-
-| Layer | Technology |
-|-------|-----------|
-| **Frontend** | Next.js 16, React 19, Three.js, Physijs, TailwindCSS |
-| **Physics** | Physijs (client), Cannon.js (server), PhysicsEngine class |
-| **Persistence** | **IPFS / Protocol Labs** (Game history) |
-| **Blockchain** | Solidity 0.8.20+, Linea, Flow EVM, Polkadot Hub |
-| **Web3** | RainbowKit, wagmi, Viem, **Coinbase OnchainKit** |
-
-## 🌐 Network Details
-
-| Network | Chain ID | Native Token | RPC Endpoint |
-|---------|----------|--------------|--------------|
-| **Linea Sepolia** | 59141 | ETH | `rpc.sepolia.linea.build` |
-| **Flow EVM Testnet** | 545 | FLOW | `testnet.evm.nodes.onflow.org` |
-| **Polkadot Hub Testnet** | 420420417 | DOT | `rpc.polkadot.io/testnet` |
-
-## 🎯 Development Status
-
-### ✅ Completed: PL Genesis Enhancements (March 2026)
-Following Core Principles: ENHANCEMENT FIRST, AGGRESSIVE CONSOLIDATION
-
-| Feature | Description | Impact |
-|-------|-------------|--------|
-| **IPFS Persistence** | Game history pinned to IPFS | Verifiable game states |
-| **Flow EVM Support** | Added Flow EVM Testnet | Expanded player reach |
-| **Coinbase Wallet** | Smart Wallet integration | Frictionless onboarding |
-| **Multi-chain Config** | Centralized contract mapping | Easy chain expansion |
-
-### ✅ Completed: Codebase Refactoring (Jan 2026)
-Following Core Principles: ENHANCEMENT FIRST, AGGRESSIVE CONSOLIDATION, DRY, CLEAN, MODULAR
-
-| Phase | Description | Impact |
-|-------|-------------|--------|
-| **Phase 3** | Configuration Centralization | 4 config files, -78 lines |
-| **Phase 1** | State Management (useGameState) | -67 lines, testable |
-| **Phase 2** | Physics Engine Module | +510 lines, reusable |
-| **Phase 4** | Component Consolidation | **-664 lines** |
-
-## 🤝 Contributing
-
-We welcome contributions! Areas of focus:
-1. XCM Cross-chain leaderboards for Polkadot
-2. AI-driven move validation on IPFS
-3. Mobile performance optimization
+1.  **[Architecture Overview](docs/ARCHITECTURE.md)** - System design 3.0 (IPFS & Multi-chain)
+2.  **[Deployment Guide](docs/DEPLOYMENT_GUIDE.md)** - Multi-chain deployment steps (Flow/Linea/Polkadot)
+3.  **[Game Mechanics](docs/GAME_MECHANICS.md)** - Detailed rules and IPFS serialization logic
+4.  **[Implementation Summary](docs/IMPLEMENTATION_SUMMARY.md)** - Detailed list of hackathon achievements
 
 ## 📄 License
-
 MIT
 
----
-
-**Last Updated:** 2026-03-30 - PL Genesis Hackathon Final Polish
+**Built for the future of decentralized collaboration.**
