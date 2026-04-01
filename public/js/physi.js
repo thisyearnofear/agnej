@@ -385,23 +385,24 @@ window.Physijs = (function() {
 
 	// Physijs.Scene
 	Physijs.Scene = function( params ) {
-		var self = this;
+		var scene = new THREE.Scene(),
+			self = scene;
 
-		Eventable.call( this );
-		THREE.Scene.call( this );
+		Eventable.call( scene );
+		Object.setPrototypeOf( scene, Physijs.Scene.prototype );
 
-		this._worker = new Worker( Physijs.scripts.worker || 'physijs_worker.js' );
-		this._worker.transferableMessage = this._worker.webkitPostMessage || this._worker.postMessage;
-		this._materials_ref_counts = {};
-		this._objects = {};
-		this._vehicles = {};
-		this._constraints = {};
+		scene._worker = new Worker( Physijs.scripts.worker || 'physijs_worker.js' );
+		scene._worker.transferableMessage = scene._worker.webkitPostMessage || scene._worker.postMessage;
+		scene._materials_ref_counts = {};
+		scene._objects = {};
+		scene._vehicles = {};
+		scene._constraints = {};
 
 		var ab = new ArrayBuffer( 1 );
-		this._worker.transferableMessage( ab, [ab] );
+		scene._worker.transferableMessage( ab, [ab] );
 		SUPPORT_TRANSFERABLE = ( ab.byteLength === 0 );
 
-		this._worker.onmessage = function ( event ) {
+		scene._worker.onmessage = function ( event ) {
 			var _temp,
 				data = event.data;
 
@@ -488,9 +489,12 @@ window.Physijs = (function() {
 		params.ammo = Physijs.scripts.ammo || 'ammo.js';
 		params.fixedTimeStep = params.fixedTimeStep || 1 / 60;
 		params.rateLimit = params.rateLimit || true;
-		this.execute( 'init', params );
+		scene.execute( 'init', params );
+
+		return scene;
 	};
-	Physijs.Scene.prototype = new THREE.Scene;
+
+	Physijs.Scene.prototype = Object.create(THREE.Scene.prototype);
 	Physijs.Scene.prototype.constructor = Physijs.Scene;
 	Eventable.make( Physijs.Scene );
 
@@ -952,20 +956,21 @@ window.Physijs = (function() {
 
 	// Phsijs.Mesh
 	Physijs.Mesh = function ( geometry, material, mass ) {
-		var index;
+		var mesh;
 
 		if ( !geometry ) {
 			return;
 		}
 
-		Eventable.call( this );
-		THREE.Mesh.call( this, geometry, material );
+		mesh = new THREE.Mesh( geometry, material );
+		Eventable.call( mesh );
+		Object.setPrototypeOf( mesh, Physijs.Mesh.prototype );
 
 		if ( !geometry.boundingBox ) {
 			geometry.computeBoundingBox();
 		}
 
-		this._physijs = {
+		mesh._physijs = {
 			type: null,
 			id: getObjectId(),
 			mass: mass || 0,
@@ -973,8 +978,10 @@ window.Physijs = (function() {
 			linearVelocity: new THREE.Vector3,
 			angularVelocity: new THREE.Vector3
 		};
+
+		return mesh;
 	};
-	Physijs.Mesh.prototype = new THREE.Mesh;
+	Physijs.Mesh.prototype = Object.create(THREE.Mesh.prototype);
 	Physijs.Mesh.prototype.constructor = Physijs.Mesh;
 	Eventable.make( Physijs.Mesh );
 
@@ -1086,9 +1093,10 @@ window.Physijs = (function() {
 
 	// Physijs.PlaneMesh
 	Physijs.PlaneMesh = function ( geometry, material, mass ) {
-		var width, height;
+		var mesh, width, height;
 
-		Physijs.Mesh.call( this, geometry, material, mass );
+		mesh = new Physijs.Mesh( geometry, material, mass );
+		Object.setPrototypeOf( mesh, Physijs.PlaneMesh.prototype );
 
 		if ( !geometry.boundingBox ) {
 			geometry.computeBoundingBox();
@@ -1097,47 +1105,53 @@ window.Physijs = (function() {
 		width = geometry.boundingBox.max.x - geometry.boundingBox.min.x;
 		height = geometry.boundingBox.max.y - geometry.boundingBox.min.y;
 
-		this._physijs.type = 'plane';
-		this._physijs.normal = geometry.faces[0].normal.clone();
-		this._physijs.mass = (typeof mass === 'undefined') ? width * height : mass;
+		mesh._physijs.type = 'plane';
+		mesh._physijs.normal = geometry.faces[0].normal.clone();
+		mesh._physijs.mass = (typeof mass === 'undefined') ? width * height : mass;
+
+		return mesh;
 	};
-	Physijs.PlaneMesh.prototype = new Physijs.Mesh;
+	Physijs.PlaneMesh.prototype = Object.create( Physijs.Mesh.prototype );
 	Physijs.PlaneMesh.prototype.constructor = Physijs.PlaneMesh;
 
 	// Physijs.HeightfieldMesh
 	Physijs.HeightfieldMesh = function ( geometry, material, mass, xdiv, ydiv) {
-		Physijs.Mesh.call( this, geometry, material, mass );
+		var mesh = new Physijs.Mesh( geometry, material, mass );
+		Object.setPrototypeOf( mesh, Physijs.HeightfieldMesh.prototype );
 
-		this._physijs.type   = 'heightfield';
-		this._physijs.xsize  = geometry.boundingBox.max.x - geometry.boundingBox.min.x;
-		this._physijs.ysize  = geometry.boundingBox.max.y - geometry.boundingBox.min.y;
-		this._physijs.xpts = (typeof xdiv === 'undefined') ? Math.sqrt(geometry.vertices.length) : xdiv + 1;
-		this._physijs.ypts = (typeof ydiv === 'undefined') ? Math.sqrt(geometry.vertices.length) : ydiv + 1;
+		mesh._physijs.type   = 'heightfield';
+		mesh._physijs.xsize  = geometry.boundingBox.max.x - geometry.boundingBox.min.x;
+		mesh._physijs.ysize  = geometry.boundingBox.max.y - geometry.boundingBox.min.y;
+		mesh._physijs.xpts = (typeof xdiv === 'undefined') ? Math.sqrt(geometry.vertices.length) : xdiv + 1;
+		mesh._physijs.ypts = (typeof ydiv === 'undefined') ? Math.sqrt(geometry.vertices.length) : ydiv + 1;
 		// note - this assumes our plane geometry is square, unless we pass in specific xdiv and ydiv
-		this._physijs.absMaxHeight = Math.max(geometry.boundingBox.max.z,Math.abs(geometry.boundingBox.min.z));
+		mesh._physijs.absMaxHeight = Math.max(geometry.boundingBox.max.z,Math.abs(geometry.boundingBox.min.z));
 
 		var points = [];
 
 		var a, b;
 		for ( var i = 0; i < geometry.vertices.length; i++ ) {
 
-			a = i % this._physijs.xpts;
-			b = Math.round( ( i / this._physijs.xpts ) - ( (i % this._physijs.xpts) / this._physijs.xpts ) );
-			points[i] = geometry.vertices[ a + ( ( this._physijs.ypts - b - 1 ) * this._physijs.ypts ) ].z;
+			a = i % mesh._physijs.xpts;
+			b = Math.round( ( i / mesh._physijs.xpts ) - ( (i % mesh._physijs.xpts) / mesh._physijs.xpts ) );
+			points[i] = geometry.vertices[ a + ( ( mesh._physijs.ypts - b - 1 ) * mesh._physijs.ypts ) ].z;
 
 			//points[i] = geometry.vertices[i];
 		}
 
-		this._physijs.points = points;
+		mesh._physijs.points = points;
+
+		return mesh;
 	};
-	Physijs.HeightfieldMesh.prototype = new Physijs.Mesh;
+	Physijs.HeightfieldMesh.prototype = Object.create( Physijs.Mesh.prototype );
 	Physijs.HeightfieldMesh.prototype.constructor = Physijs.HeightfieldMesh;
 
 	// Physijs.BoxMesh
 	Physijs.BoxMesh = function( geometry, material, mass ) {
-		var width, height, depth;
+		var mesh, width, height, depth;
 
-		Physijs.Mesh.call( this, geometry, material, mass );
+		mesh = new Physijs.Mesh( geometry, material, mass );
+		Object.setPrototypeOf( mesh, Physijs.BoxMesh.prototype );
 
 		if ( !geometry.boundingBox ) {
 			geometry.computeBoundingBox();
@@ -1147,37 +1161,43 @@ window.Physijs = (function() {
 		height = geometry.boundingBox.max.y - geometry.boundingBox.min.y;
 		depth = geometry.boundingBox.max.z - geometry.boundingBox.min.z;
 
-		this._physijs.type = 'box';
-		this._physijs.width = width;
-		this._physijs.height = height;
-		this._physijs.depth = depth;
-		this._physijs.mass = (typeof mass === 'undefined') ? width * height * depth : mass;
+		mesh._physijs.type = 'box';
+		mesh._physijs.width = width;
+		mesh._physijs.height = height;
+		mesh._physijs.depth = depth;
+		mesh._physijs.mass = (typeof mass === 'undefined') ? width * height * depth : mass;
+
+		return mesh;
 	};
-	Physijs.BoxMesh.prototype = new Physijs.Mesh;
+	Physijs.BoxMesh.prototype = Object.create( Physijs.Mesh.prototype );
 	Physijs.BoxMesh.prototype.constructor = Physijs.BoxMesh;
 
 
 	// Physijs.SphereMesh
 	Physijs.SphereMesh = function( geometry, material, mass ) {
-		Physijs.Mesh.call( this, geometry, material, mass );
+		var mesh = new Physijs.Mesh( geometry, material, mass );
+		Object.setPrototypeOf( mesh, Physijs.SphereMesh.prototype );
 
 		if ( !geometry.boundingSphere ) {
 			geometry.computeBoundingSphere();
 		}
 
-		this._physijs.type = 'sphere';
-		this._physijs.radius = geometry.boundingSphere.radius;
-		this._physijs.mass = (typeof mass === 'undefined') ? (4/3) * Math.PI * Math.pow(this._physijs.radius, 3) : mass;
+		mesh._physijs.type = 'sphere';
+		mesh._physijs.radius = geometry.boundingSphere.radius;
+		mesh._physijs.mass = (typeof mass === 'undefined') ? (4/3) * Math.PI * Math.pow(mesh._physijs.radius, 3) : mass;
+
+		return mesh;
 	};
-	Physijs.SphereMesh.prototype = new Physijs.Mesh;
+	Physijs.SphereMesh.prototype = Object.create( Physijs.Mesh.prototype );
 	Physijs.SphereMesh.prototype.constructor = Physijs.SphereMesh;
 
 
 	// Physijs.CylinderMesh
 	Physijs.CylinderMesh = function( geometry, material, mass ) {
-		var width, height, depth;
+		var mesh, width, height, depth;
 
-		Physijs.Mesh.call( this, geometry, material, mass );
+		mesh = new Physijs.Mesh( geometry, material, mass );
+		Object.setPrototypeOf( mesh, Physijs.CylinderMesh.prototype );
 
 		if ( !geometry.boundingBox ) {
 			geometry.computeBoundingBox();
@@ -1187,21 +1207,24 @@ window.Physijs = (function() {
 		height = geometry.boundingBox.max.y - geometry.boundingBox.min.y;
 		depth = geometry.boundingBox.max.z - geometry.boundingBox.min.z;
 
-		this._physijs.type = 'cylinder';
-		this._physijs.width = width;
-		this._physijs.height = height;
-		this._physijs.depth = depth;
-		this._physijs.mass = (typeof mass === 'undefined') ? width * height * depth : mass;
+		mesh._physijs.type = 'cylinder';
+		mesh._physijs.width = width;
+		mesh._physijs.height = height;
+		mesh._physijs.depth = depth;
+		mesh._physijs.mass = (typeof mass === 'undefined') ? width * height * depth : mass;
+
+		return mesh;
 	};
-	Physijs.CylinderMesh.prototype = new Physijs.Mesh;
+	Physijs.CylinderMesh.prototype = Object.create( Physijs.Mesh.prototype );
 	Physijs.CylinderMesh.prototype.constructor = Physijs.CylinderMesh;
 
 
 	// Physijs.CapsuleMesh
 	Physijs.CapsuleMesh = function( geometry, material, mass ) {
-		var width, height, depth;
+		var mesh, width, height, depth;
 
-		Physijs.Mesh.call( this, geometry, material, mass );
+		mesh = new Physijs.Mesh( geometry, material, mass );
+		Object.setPrototypeOf( mesh, Physijs.CapsuleMesh.prototype );
 
 		if ( !geometry.boundingBox ) {
 			geometry.computeBoundingBox();
@@ -1211,20 +1234,23 @@ window.Physijs = (function() {
 		height = geometry.boundingBox.max.y - geometry.boundingBox.min.y;
 		depth = geometry.boundingBox.max.z - geometry.boundingBox.min.z;
 
-		this._physijs.type = 'capsule';
-		this._physijs.radius = Math.max(width / 2, depth / 2);
-		this._physijs.height = height;
-		this._physijs.mass = (typeof mass === 'undefined') ? width * height * depth : mass;
+		mesh._physijs.type = 'capsule';
+		mesh._physijs.radius = Math.max(width / 2, depth / 2);
+		mesh._physijs.height = height;
+		mesh._physijs.mass = (typeof mass === 'undefined') ? width * height * depth : mass;
+
+		return mesh;
 	};
-	Physijs.CapsuleMesh.prototype = new Physijs.Mesh;
+	Physijs.CapsuleMesh.prototype = Object.create( Physijs.Mesh.prototype );
 	Physijs.CapsuleMesh.prototype.constructor = Physijs.CapsuleMesh;
 
 
 	// Physijs.ConeMesh
 	Physijs.ConeMesh = function( geometry, material, mass ) {
-		var width, height, depth;
+		var mesh, width, height, depth;
 
-		Physijs.Mesh.call( this, geometry, material, mass );
+		mesh = new Physijs.Mesh( geometry, material, mass );
+		Object.setPrototypeOf( mesh, Physijs.ConeMesh.prototype );
 
 		if ( !geometry.boundingBox ) {
 			geometry.computeBoundingBox();
@@ -1233,22 +1259,26 @@ window.Physijs = (function() {
 		width = geometry.boundingBox.max.x - geometry.boundingBox.min.x;
 		height = geometry.boundingBox.max.y - geometry.boundingBox.min.y;
 
-		this._physijs.type = 'cone';
-		this._physijs.radius = width / 2;
-		this._physijs.height = height;
-		this._physijs.mass = (typeof mass === 'undefined') ? width * height : mass;
+		mesh._physijs.type = 'cone';
+		mesh._physijs.radius = width / 2;
+		mesh._physijs.height = height;
+		mesh._physijs.mass = (typeof mass === 'undefined') ? width * height : mass;
+
+		return mesh;
 	};
-	Physijs.ConeMesh.prototype = new Physijs.Mesh;
+	Physijs.ConeMesh.prototype = Object.create( Physijs.Mesh.prototype );
 	Physijs.ConeMesh.prototype.constructor = Physijs.ConeMesh;
 
 
 	// Physijs.ConcaveMesh
 	Physijs.ConcaveMesh = function( geometry, material, mass ) {
 		var i,
+			mesh,
 			width, height, depth,
 			vertices, face, triangles = [];
 
-		Physijs.Mesh.call( this, geometry, material, mass );
+		mesh = new Physijs.Mesh( geometry, material, mass );
+		Object.setPrototypeOf( mesh, Physijs.ConcaveMesh.prototype );
 
 		if ( !geometry.boundingBox ) {
 			geometry.computeBoundingBox();
@@ -1286,21 +1316,25 @@ window.Physijs = (function() {
 		height = geometry.boundingBox.max.y - geometry.boundingBox.min.y;
 		depth = geometry.boundingBox.max.z - geometry.boundingBox.min.z;
 
-		this._physijs.type = 'concave';
-		this._physijs.triangles = triangles;
-		this._physijs.mass = (typeof mass === 'undefined') ? width * height * depth : mass;
+		mesh._physijs.type = 'concave';
+		mesh._physijs.triangles = triangles;
+		mesh._physijs.mass = (typeof mass === 'undefined') ? width * height * depth : mass;
+
+		return mesh;
 	};
-	Physijs.ConcaveMesh.prototype = new Physijs.Mesh;
+	Physijs.ConcaveMesh.prototype = Object.create( Physijs.Mesh.prototype );
 	Physijs.ConcaveMesh.prototype.constructor = Physijs.ConcaveMesh;
 
 
 	// Physijs.ConvexMesh
 	Physijs.ConvexMesh = function( geometry, material, mass ) {
 		var i,
+			mesh,
 			width, height, depth,
 			points = [];
 
-		Physijs.Mesh.call( this, geometry, material, mass );
+		mesh = new Physijs.Mesh( geometry, material, mass );
+		Object.setPrototypeOf( mesh, Physijs.ConvexMesh.prototype );
 
 		if ( !geometry.boundingBox ) {
 			geometry.computeBoundingBox();
@@ -1319,11 +1353,13 @@ window.Physijs = (function() {
 		height = geometry.boundingBox.max.y - geometry.boundingBox.min.y;
 		depth = geometry.boundingBox.max.z - geometry.boundingBox.min.z;
 
-		this._physijs.type = 'convex';
-		this._physijs.points = points;
-		this._physijs.mass = (typeof mass === 'undefined') ? width * height * depth : mass;
+		mesh._physijs.type = 'convex';
+		mesh._physijs.points = points;
+		mesh._physijs.mass = (typeof mass === 'undefined') ? width * height * depth : mass;
+
+		return mesh;
 	};
-	Physijs.ConvexMesh.prototype = new Physijs.Mesh;
+	Physijs.ConvexMesh.prototype = Object.create( Physijs.Mesh.prototype );
 	Physijs.ConvexMesh.prototype.constructor = Physijs.ConvexMesh;
 
 
